@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import time
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.config import ModelsConfig, Settings
@@ -24,6 +27,23 @@ from app.tools.registry import ToolRegistry
 from app.tools.search_intent import should_use_search
 from app.utils.ids import generate_chat_completion_id
 from app.utils.logging import log_safe
+
+
+@dataclass
+class StreamOutcome:
+    provider: str = ""
+    usage: Usage = field(default_factory=Usage)
+    guard: GuardInfo = field(default_factory=GuardInfo)
+    tools: ToolMetadata = field(default_factory=ToolMetadata)
+    sources: list[SourceItem] = field(default_factory=list)
+    status: str = "error"
+    error_code: str = ""
+
+
+@dataclass
+class StreamHandle:
+    events: AsyncIterator[str]
+    outcome: StreamOutcome
 
 
 class ChatOrchestrator:
@@ -60,69 +80,20 @@ class ChatOrchestrator:
     ) -> ChatCompletionResponse:
         if request.stream:
             raise APIError(
-                code="streaming_not_implemented",
-                message="Streaming is not implemented yet.",
-                status_code=501,
-            )
-        if request.search not in {"auto", "on", "off"}:
-            raise APIError(
-                code="invalid_search_mode",
-                message="Search mode must be one of: auto, on, off.",
+                code="stream_provider_failed",
+                message="Use streaming endpoint flow for stream=true.",
                 status_code=400,
             )
-        tools_mode = self._normalize_tools_mode(request.tools)
 
         started_at = time.perf_counter()
-        model_profile = self.models_config.models.get(request.model)
-        if not model_profile:
-            raise APIError(
-                code="invalid_model",
-                message=f"Model '{request.model}' is not supported.",
-                status_code=400,
-            )
-
-        messages: list[ChatMessage] = ensure_system_message(request.messages)
-        input_guard_info = GuardInfo()
-        output_guard_info = GuardInfo()
-        tools_meta = ToolMetadata()
-        sources: list[SourceItem] = []
+        tools_mode = self._normalize_and_validate_request(request)
+        model_profile, messages, input_guard_info, tools_meta, sources = await self._prepare_chat_context(
+            request_id=request_id,
+            request=request,
+            tools_mode=tools_mode,
+        )
 
         try:
-            if self.enable_input_guard:
-                messages, input_guard_info = self.input_guard.scan_messages(messages)
-
-            latest_user_message = self._latest_user_message(messages)
-
-            # Existing web search flow (separate from tool execution).
-            messages, search_sources, search_used_tools = await self._maybe_apply_search_context(
-                messages=messages,
-                request=request,
-                latest_user_message=latest_user_message,
-                model_profile=model_profile.model_dump(),
-                tools_meta=tools_meta,
-                request_id=request_id,
-            )
-            sources.extend(search_sources)
-            tools_meta.used.extend(search_used_tools)
-
-            planned_tools = self._plan_tools(
-                message=latest_user_message,
-                model_profile=model_profile.model_dump(),
-                tools_mode=tools_mode,
-            )
-            tool_context_text, tool_sources, tool_used, executions = await self._execute_planned_tools(
-                message=latest_user_message,
-                planned_tools=planned_tools,
-                tools_mode=tools_mode,
-                model_alias=request.model,
-                request_id=request_id,
-            )
-            tools_meta.used.extend(tool_used)
-            tools_meta.executions = executions
-            sources.extend(tool_sources)
-            if tool_context_text:
-                messages = append_tool_context(messages, tool_context_text)
-
             route_result = await self.router.route_chat(
                 request_id=request_id,
                 model_alias=request.model,
@@ -131,19 +102,12 @@ class ChatOrchestrator:
                 max_tokens=request.max_tokens,
             )
 
+            output_guard_info = GuardInfo()
             response_text = route_result.provider_result.content
             if self.enable_output_guard:
                 response_text, output_guard_info = self.output_guard.scan_text(response_text)
 
-            combined_categories = sorted(
-                set(input_guard_info.categories).union(set(output_guard_info.categories))
-            )
-            combined_guard = GuardInfo(
-                input_redacted=input_guard_info.input_redacted,
-                output_redacted=output_guard_info.output_redacted,
-                redaction_count=input_guard_info.redaction_count + output_guard_info.redaction_count,
-                categories=combined_categories,
-            )
+            combined_guard = self._combine_guard_info(input_guard_info, output_guard_info)
             usage = Usage(
                 prompt_tokens=route_result.provider_result.usage.prompt_tokens,
                 completion_tokens=route_result.provider_result.usage.completion_tokens,
@@ -188,6 +152,221 @@ class ChatOrchestrator:
                 error_code=exc.code,
             )
             raise
+
+    async def create_chat_completion_stream(
+        self,
+        request_id: str,
+        request: ChatCompletionRequest,
+    ) -> StreamHandle:
+        tools_mode = self._normalize_and_validate_request(request)
+        model_profile, messages, input_guard_info, tools_meta, sources = await self._prepare_chat_context(
+            request_id=request_id,
+            request=request,
+            tools_mode=tools_mode,
+        )
+
+        stream_result = await self.router.route_chat_stream(
+            request_id=request_id,
+            model_alias=request.model,
+            messages=messages,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+        )
+
+        completion_id = generate_chat_completion_id()
+        created = int(time.time())
+        outcome = StreamOutcome(
+            provider=stream_result.provider_used,
+            tools=tools_meta,
+            sources=self._dedupe_sources(sources),
+        )
+
+        async def stream_events() -> AsyncIterator[str]:
+            provider_finish_reason = "stop"
+            output_guard_info = GuardInfo()
+            full_output_parts: list[str] = []
+
+            yield self._to_sse(
+                {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": request.model,
+                    "provider": stream_result.provider_used,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant"},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            )
+
+            try:
+                async for provider_chunk in stream_result.stream:
+                    if provider_chunk.usage is not None:
+                        outcome.usage = Usage(
+                            prompt_tokens=provider_chunk.usage.prompt_tokens,
+                            completion_tokens=provider_chunk.usage.completion_tokens,
+                            total_tokens=provider_chunk.usage.total_tokens,
+                        )
+
+                    if provider_chunk.finish_reason:
+                        provider_finish_reason = provider_chunk.finish_reason
+
+                    if provider_chunk.delta:
+                        full_output_parts.append(provider_chunk.delta)
+                        yield self._to_sse(
+                            {
+                                "id": completion_id,
+                                "object": "chat.completion.chunk",
+                                "created": created,
+                                "model": request.model,
+                                "provider": stream_result.provider_used,
+                                "choices": [
+                                    {
+                                        "index": 0,
+                                        "delta": {"content": provider_chunk.delta},
+                                        "finish_reason": None,
+                                    }
+                                ],
+                            }
+                        )
+            except Exception:
+                outcome.status = "error"
+                outcome.error_code = "stream_interrupted"
+                yield self._to_sse(
+                    {
+                        "object": "chat.completion.error",
+                        "error": {
+                            "code": "stream_interrupted",
+                            "message": "The streaming response was interrupted.",
+                        },
+                    }
+                )
+                yield self._done_sse()
+                return
+
+            if self.enable_output_guard:
+                _sanitized_text, output_guard_info = self.output_guard.scan_text("".join(full_output_parts))
+                if output_guard_info.output_redacted:
+                    yield self._to_sse(
+                        {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": request.model,
+                            "provider": stream_result.provider_used,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {"content": "\n[Output was sanitized by NestyAI Guard.]"},
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                    )
+
+            outcome.guard = self._combine_guard_info(input_guard_info, output_guard_info)
+            outcome.status = "success"
+            outcome.error_code = ""
+
+            yield self._to_sse(
+                {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": request.model,
+                    "provider": stream_result.provider_used,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": provider_finish_reason or "stop",
+                        }
+                    ],
+                }
+            )
+            yield self._to_sse(
+                {
+                    "id": completion_id,
+                    "object": "chat.completion.metadata",
+                    "created": created,
+                    "model": request.model,
+                    "provider": stream_result.provider_used,
+                    "guard": outcome.guard.model_dump(),
+                    "tools": outcome.tools.model_dump(),
+                    "sources": [item.model_dump() for item in outcome.sources],
+                    "usage": outcome.usage.model_dump(),
+                }
+            )
+            yield self._done_sse()
+
+        return StreamHandle(events=stream_events(), outcome=outcome)
+
+    def _normalize_and_validate_request(self, request: ChatCompletionRequest) -> str | list[str]:
+        if request.search not in {"auto", "on", "off"}:
+            raise APIError(
+                code="invalid_search_mode",
+                message="Search mode must be one of: auto, on, off.",
+                status_code=400,
+            )
+        return self._normalize_tools_mode(request.tools)
+
+    async def _prepare_chat_context(
+        self,
+        request_id: str,
+        request: ChatCompletionRequest,
+        tools_mode: str | list[str],
+    ) -> tuple[Any, list[ChatMessage], GuardInfo, ToolMetadata, list[SourceItem]]:
+        model_profile = self.models_config.models.get(request.model)
+        if not model_profile:
+            raise APIError(
+                code="invalid_model",
+                message=f"Model '{request.model}' is not supported.",
+                status_code=400,
+            )
+
+        messages: list[ChatMessage] = ensure_system_message(request.messages)
+        input_guard_info = GuardInfo()
+        tools_meta = ToolMetadata()
+        sources: list[SourceItem] = []
+
+        if self.enable_input_guard:
+            messages, input_guard_info = self.input_guard.scan_messages(messages)
+
+        latest_user_message = self._latest_user_message(messages)
+        messages, search_sources, search_used_tools = await self._maybe_apply_search_context(
+            messages=messages,
+            request=request,
+            latest_user_message=latest_user_message,
+            model_profile=model_profile.model_dump(),
+            tools_meta=tools_meta,
+            request_id=request_id,
+        )
+        sources.extend(search_sources)
+        tools_meta.used.extend(search_used_tools)
+
+        planned_tools = self._plan_tools(
+            message=latest_user_message,
+            model_profile=model_profile.model_dump(),
+            tools_mode=tools_mode,
+        )
+        tool_context_text, tool_sources, tool_used, executions = await self._execute_planned_tools(
+            message=latest_user_message,
+            planned_tools=planned_tools,
+            tools_mode=tools_mode,
+            model_alias=request.model,
+            request_id=request_id,
+        )
+        tools_meta.used.extend(tool_used)
+        tools_meta.executions = executions
+        sources.extend(tool_sources)
+        if tool_context_text:
+            messages = append_tool_context(messages, tool_context_text)
+
+        return model_profile, messages, input_guard_info, tools_meta, sources
 
     def _normalize_tools_mode(self, tools_field: str | list[str]) -> str | list[str]:
         if isinstance(tools_field, str):
@@ -422,3 +601,21 @@ class ChatOrchestrator:
             seen.add(key)
             deduped.append(item)
         return deduped
+
+    @staticmethod
+    def _combine_guard_info(input_guard_info: GuardInfo, output_guard_info: GuardInfo) -> GuardInfo:
+        combined_categories = sorted(set(input_guard_info.categories).union(set(output_guard_info.categories)))
+        return GuardInfo(
+            input_redacted=input_guard_info.input_redacted,
+            output_redacted=output_guard_info.output_redacted,
+            redaction_count=input_guard_info.redaction_count + output_guard_info.redaction_count,
+            categories=combined_categories,
+        )
+
+    @staticmethod
+    def _to_sse(payload: dict[str, Any]) -> str:
+        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    @staticmethod
+    def _done_sse() -> str:
+        return "data: [DONE]\n\n"

@@ -40,6 +40,11 @@ class GuardInfo(BaseModel):
     categories: list[str] = Field(default_factory=list)
 
 
+class AuthDebugInfo(BaseModel):
+    api_key_id: str
+    key_name: str
+
+
 class ChatCompletionResponse(BaseModel):
     id: str
     object: str = "chat.completion"
@@ -51,3 +56,4 @@ class ChatCompletionResponse(BaseModel):
     guard: GuardInfo
     tools: ToolMetadata = Field(default_factory=ToolMetadata)
     sources: list[SourceItem] = Field(default_factory=list)
+    auth: AuthDebugInfo | None = None

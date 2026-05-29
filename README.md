@@ -1,6 +1,6 @@
-# NestyAI (Phase 3.5: Tool Reliability + TTL Cache + Real Weather/Exchange)
+# NestyAI (Phase 4: API Key Auth, Rate Limit, Usage Tracking)
 
-NestyAI is a personal FastAPI AI Gateway with OpenAI-compatible chat, provider fallback routing, safety guards, web search, and a server-side tool system.
+NestyAI is a personal FastAPI AI Gateway with OpenAI-compatible chat, provider fallback routing, safety guards, web search, and server-side tools.
 
 ## Core Endpoints
 
@@ -34,87 +34,56 @@ Supported tools:
 - `weather_lookup` (Open-Meteo)
 - `exchange_rate` (Frankfurter)
 
-## Phase 3.5 Cache Overview
+## Cache Overview
 
-NestyAI now includes in-memory TTL cache for tool/search reliability.
+In-memory TTL cache for tool/search reliability:
 
 - In-memory only
 - No Redis yet
 - Cache resets on server restart
 
-Default TTL policy:
+## Phase 4 Auth Overview
 
-| Tool/Search | Cache | TTL |
-|---|---|---|
-| calculator | disabled | - |
-| wikipedia_lookup | enabled | 86400s |
-| package_version_lookup | enabled | 1800s |
-| weather_lookup | enabled | 600s |
-| exchange_rate | enabled | 1800s |
-| web_search | enabled | 600s |
+- API keys are stored as hashes in local SQLite (`data/nesty.db` by default).
+- Chat endpoint (`/v1/chat/completions`) supports:
+  - `Authorization: Bearer <key>`
+  - `X-Nesty-API-Key: <key>`
+- If `REQUIRE_API_KEY=true`, chat always requires a valid active key.
+- `/health` and `/v1/models` remain public when:
+  - `PUBLIC_HEALTH=true`
+  - `PUBLIC_MODELS=true`
+- Recommended for deployment:
+  - `REQUIRE_API_KEY=true`
+  - set `NESTY_API_KEY_HASH_SECRET`
 
-## Tools vs Search
+If `NESTY_API_KEY_HASH_SECRET` is set, key hashes use HMAC-SHA256.
+If unset, fallback is plain SHA256 (works for local dev, not recommended for deployment).
 
-- `search` controls web search context (`auto/on/off`).
-- `tools` controls tool execution (`auto/off/list`).
-- They are independent and may both run in one request.
+## Rate Limit and Quota
 
-## Request Examples
+- In-memory rate limiter (per API key, or per client IP when unauthenticated).
+- Config:
+  - `RATE_LIMIT_ENABLED=true`
+  - `RATE_LIMIT_REQUESTS_PER_MINUTE=60`
+- Quotas are request-count based (not token billing):
+  - `daily_limit`
+  - `monthly_limit`
+- Quota checks apply per API key.
 
-### tools auto + search auto
+## Usage Tracking
 
-```bash
-curl -X POST "http://127.0.0.1:8000/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "nesty-combined-1.0",
-    "messages": [{"role": "user", "content": "What is the latest version of fastapi?"}],
-    "search": "auto",
-    "tools": "auto"
-  }'
-```
+Each chat request attempts to write a usage log row:
 
-### tools off
+- `api_key_id` (or `null` for unauthenticated calls)
+- `request_id`
+- `model`, `provider`
+- token usage if available
+- `tools_used`, `search_used`
+- `latency_ms`
+- `status` (`success` / `error`)
+- `error_code` when present
 
-```bash
-curl -X POST "http://127.0.0.1:8000/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "nesty-combined-1.0",
-    "messages": [{"role": "user", "content": "Viết một đoạn giới thiệu ngắn về NestyAI"}],
-    "search": "off",
-    "tools": "off"
-  }'
-```
-
-### tools explicit list
-
-```bash
-curl -X POST "http://127.0.0.1:8000/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "nesty-combined-1.0",
-    "messages": [{"role": "user", "content": "calculate (12500 * 0.15) + 200"}],
-    "search": "off",
-    "tools": ["calculator"]
-  }'
-```
-
-### Weather example
-
-- `thời tiết ở TP.HCM hôm nay`
-- `weather in Hanoi today`
-
-### Exchange rate examples
-
-- `đổi 100 USD sang VND`
-- `What is the current exchange rate from EUR to USD?`
-
-## Provider Notes
-
-- Weather uses Open-Meteo geocoding + forecast APIs.
-- Exchange rate uses Frankfurter latest endpoint.
-- Both are timeout-protected and return safe failure metadata without crashing chat in auto mode.
+NestyAI does not log raw API keys, raw prompts, or raw model outputs in usage storage.
 
 ## Setup
 
@@ -123,14 +92,100 @@ curl -X POST "http://127.0.0.1:8000/v1/chat/completions" \
 
 ```bash
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
-3. Create `.env` from `.env.example` and set provider keys:
+3. Create `.env` from `.env.example` and configure keys:
 
-- `GROQ_API_KEY`
-- `OPENROUTER_API_KEY`
-- `NVIDIA_API_KEY` (optional unless NVIDIA route is used)
-- `NVIDIA_BASE_URL` (optional)
+- Provider keys:
+  - `GROQ_API_KEY`
+  - `OPENROUTER_API_KEY`
+  - `NVIDIA_API_KEY` (optional)
+- Phase 4:
+  - `NESTY_DB_PATH=data/nesty.db`
+  - `NESTY_API_KEY_HASH_SECRET=...` (recommended)
+  - `REQUIRE_API_KEY=false` (set `true` in deployment)
+  - `PUBLIC_HEALTH=true`
+  - `PUBLIC_MODELS=true`
+  - `RATE_LIMIT_ENABLED=true`
+  - `RATE_LIMIT_REQUESTS_PER_MINUTE=60`
+  - `SAFE_DEBUG_AUTH=false`
+
+## API Key Scripts
+
+Create key:
+
+```bash
+python scripts/create_api_key.py --name local-dev --env dev --daily-limit 1000 --models nesty-flash-1.0,nesty-combined-1.0
+```
+
+List keys:
+
+```bash
+python scripts/list_api_keys.py
+```
+
+Revoke key:
+
+```bash
+python scripts/revoke_api_key.py --id key_xxxxxxxxxxxxxxxx
+```
+
+Usage summary:
+
+```bash
+python scripts/usage_summary.py --days 7
+```
+
+## Call Chat with API Key
+
+```bash
+curl -X POST "http://127.0.0.1:8000/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer nsk_dev_xxx" \
+  -d '{
+    "model": "nesty-combined-1.0",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "search": "off",
+    "tools": "auto"
+  }'
+```
+
+## Streaming (Phase 5)
+
+NestyAI now supports `stream=true` on `/v1/chat/completions` using Server-Sent Events (SSE).
+
+Response stream format:
+
+- `data: {json chunk}`
+- `data: [DONE]`
+
+Chunk object shape:
+
+- `object: "chat.completion.chunk"`
+- `choices[0].delta.content` for text deltas
+- final chunk includes `finish_reason`
+
+Metadata event:
+
+- Before `[DONE]`, NestyAI emits:
+  - `object: "chat.completion.metadata"`
+  - includes `guard`, `tools`, `sources`, `usage`
+
+Streaming example (Windows PowerShell):
+
+```bash
+curl -N -X POST "http://127.0.0.1:8000/v1/chat/completions" ^
+  -H "Content-Type: application/json" ^
+  -H "Authorization: Bearer YOUR_KEY" ^
+  -d "{\"model\":\"nesty-combined-1.0\",\"messages\":[{\"role\":\"user\",\"content\":\"Write a short intro about NestyAI\"}],\"stream\":true,\"search\":\"off\",\"tools\":\"off\"}"
+```
+
+Streaming notes:
+
+- OutputGuard currently runs after stream completion (MVP safety model).
+- If output sanitation is detected, stream metadata indicates redaction and a guard notice chunk can be emitted.
+- Usage logging is recorded after stream completion when possible.
 
 ## Run
 
@@ -141,38 +196,60 @@ python run.py
 ## Run Tests
 
 ```bash
-python -m pytest
+python -m pytest -q
 ```
 
-Notes:
+## Phase 4.1 Runtime Verification
 
-- Tests mock external HTTP calls.
-- Tests do not call real Groq/OpenRouter/NVIDIA providers.
-- Tests do not call real DuckDuckGo/Wikipedia/Open-Meteo/Frankfurter/PyPI/npm.
-
-## Smoke Test
+Run full test suite:
 
 ```bash
-python scripts/smoke_test.py
+python -m pytest -q
 ```
 
-Optional custom URL:
+Verify scripts:
 
 ```bash
-BASE_URL=http://127.0.0.1:8000 python scripts/smoke_test.py
+python scripts/create_api_key.py --name local-dev --env dev --daily-limit 1000 --models nesty-flash-1.0,nesty-combined-1.0
+python scripts/list_api_keys.py
+python scripts/usage_summary.py --days 7
 ```
 
-## Tool Demo Script
+Manual auth verification:
 
 ```bash
-python scripts/test_tools.py
+REQUIRE_API_KEY=true
+PUBLIC_HEALTH=true
+PUBLIC_MODELS=true
 ```
 
-## Troubleshooting
+Then verify:
 
-- `missing_api_key`: set provider API keys in `.env`.
-- `invalid_tools_mode`: `tools` must be `"auto"`, `"off"`, or `list[str]`.
-- `unknown_tool`: explicit `tools` list contains unsupported tool name.
-- `search_failed` with `search=on`: search backend temporarily unavailable.
-- Weather/exchange API temporary failure: retry later or fallback to non-live answer.
+- `GET /health` is public.
+- `GET /v1/models` is public.
+- `POST /v1/chat/completions` requires API key.
 
+Runtime note:
+
+- FastAPI startup init is migrated from `@app.on_event("startup")` to lifespan.
+- A specific TestClient deprecation warning may be filtered in pytest when it is upstream-only.
+- In restricted environments, pytest cache warnings can appear and do not affect pass/fail.
+
+Troubleshooting:
+
+- If `.pytest_cache` cannot be written due to environment restrictions, test outcomes are still valid.
+- If `python` is not in PATH, run tests with your interpreter launcher path directly.
+
+## Deployment Recommendations
+
+- Set `REQUIRE_API_KEY=true`.
+- Set `NESTY_API_KEY_HASH_SECRET`.
+- Do not commit `.env`.
+- Do not commit `data/nesty.db`.
+- Keep `SAFE_DEBUG_AUTH=false` in production.
+
+## Notes
+
+- No billing implementation in Phase 4.
+- No user accounts/login/OAuth in Phase 4.
+- No admin HTTP endpoints yet (scripts only). Admin API can be Phase 4.5.

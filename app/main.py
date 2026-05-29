@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -9,16 +11,32 @@ from app.api.health import router as health_router
 from app.api.models import router as models_router
 from app.core.errors import APIError, build_error_response
 from app.deps import get_settings
+from app.storage.db import init_db
 from app.utils.logging import get_logger
 
 
 logger = get_logger("nesty.api")
+
+_initialized_db_paths: set[str] = set()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = get_settings()
+    db_path = settings.nesty_db_path
+    if db_path not in _initialized_db_paths:
+        init_db(db_path)
+        _initialized_db_paths.add(db_path)
+    yield
+
+
 settings = get_settings()
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Personal AI Gateway Server",
+    lifespan=lifespan,
 )
 
 
@@ -39,7 +57,7 @@ app.include_router(chat_router)
 @app.exception_handler(APIError)
 async def api_error_handler(_: Request, exc: APIError) -> JSONResponse:
     payload = build_error_response(exc.code, exc.message, exc.details)
-    return JSONResponse(status_code=exc.status_code, content=payload)
+    return JSONResponse(status_code=exc.status_code, content=payload, headers=exc.headers)
 
 
 @app.exception_handler(RequestValidationError)

@@ -8,7 +8,11 @@ ERROR_CODES = {
     "provider_unavailable",
     "all_providers_failed",
     "missing_api_key",
+    "invalid_api_key",
     "streaming_not_implemented",
+    "streaming_not_supported",
+    "stream_interrupted",
+    "stream_provider_failed",
     "invalid_request",
     "search_failed",
     "context_sanitization_failed",
@@ -20,6 +24,11 @@ ERROR_CODES = {
     "tool_execution_failed",
     "tool_timeout",
     "tool_not_configured",
+    "model_not_allowed",
+    "rate_limit_exceeded",
+    "daily_quota_exceeded",
+    "monthly_quota_exceeded",
+    "usage_logging_failed",
 }
 
 
@@ -29,6 +38,7 @@ class APIError(Exception):
     message: str
     status_code: int = 400
     details: dict[str, Any] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -42,6 +52,11 @@ class ProviderError(Exception):
 class MissingAPIKeyError(ProviderError):
     def __init__(self, provider: str) -> None:
         super().__init__(provider=provider, message="Missing API key.", retryable=True)
+
+
+class StreamingNotSupportedError(ProviderError):
+    def __init__(self, provider: str) -> None:
+        super().__init__(provider=provider, message="Streaming is not supported by this provider.", retryable=True)
 
 
 def build_error_response(code: str, message: str, details: dict[str, Any] | None = None) -> dict[str, Any]:

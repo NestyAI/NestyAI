@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 import httpx
 
-from app.core.errors import MissingAPIKeyError, ProviderError
+from app.core.errors import MissingAPIKeyError, ProviderError, StreamingNotSupportedError
 from app.providers.base import BaseProvider
 from app.schemas.chat import ChatMessage
-from app.schemas.provider import ProviderChatResult, ProviderUsage
+from app.schemas.provider import ProviderChatResult, ProviderStreamChunk, ProviderUsage
 
 
 class NvidiaProvider(BaseProvider):
@@ -102,3 +104,13 @@ class NvidiaProvider(BaseProvider):
             total_tokens=int(usage_raw.get("total_tokens", 0) or 0),
         )
         return ProviderChatResult(provider=self.provider_name, content=content, usage=usage)
+
+    async def stream_chat_completion(
+        self,
+        messages: list[ChatMessage],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> AsyncIterator[ProviderStreamChunk]:
+        raise StreamingNotSupportedError(self.provider_name)
+        yield ProviderStreamChunk()

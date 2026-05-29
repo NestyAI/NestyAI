@@ -13,3 +13,9 @@ class ProviderChatResult(BaseModel):
     provider: str
     content: str
     usage: ProviderUsage = Field(default_factory=ProviderUsage)
+
+
+class ProviderStreamChunk(BaseModel):
+    delta: str = ""
+    finish_reason: str | None = None
+    usage: ProviderUsage | None = None

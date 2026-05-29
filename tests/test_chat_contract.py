@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config import Settings
+from app.core.orchestrator import StreamHandle, StreamOutcome
 from app.schemas.chat import (
     ChatChoice,
     ChatCompletionResponse,
@@ -16,6 +18,37 @@ class FakeOrchestrator:
 
     async def create_chat_completion(self, request_id: str, request):
         return self.response
+
+    async def create_chat_completion_stream(self, request_id: str, request):
+        async def events():
+            yield (
+                'data: {"id":"chatcmpl_test","object":"chat.completion.chunk","created":1700000000,'
+                '"model":"nesty-combined-1.0","provider":"openrouter","choices":[{"index":0,'
+                '"delta":{"role":"assistant"},"finish_reason":null}]}\n\n'
+            )
+            yield (
+                'data: {"id":"chatcmpl_test","object":"chat.completion.chunk","created":1700000000,'
+                '"model":"nesty-combined-1.0","provider":"openrouter","choices":[{"index":0,'
+                '"delta":{"content":"Hello"},"finish_reason":null}]}\n\n'
+            )
+            yield (
+                'data: {"id":"chatcmpl_test","object":"chat.completion.metadata","created":1700000000,'
+                '"model":"nesty-combined-1.0","provider":"openrouter","guard":{"input_redacted":false,'
+                '"output_redacted":false,"redaction_count":0,"categories":[]},"tools":{"used":[],"search":'
+                '{"enabled":false,"query":null,"results_count":0,"failed":false},"executions":[]},'
+                '"sources":[],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}\n\n'
+            )
+            yield "data: [DONE]\n\n"
+
+        return StreamHandle(
+            events=events(),
+            outcome=StreamOutcome(
+                provider="openrouter",
+                status="success",
+                tools=ToolMetadata(),
+                usage=Usage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+            ),
+        )
 
 
 def _mock_response(search_enabled: bool = False, with_sources: bool = False) -> ChatCompletionResponse:
@@ -92,17 +125,28 @@ def test_chat_invalid_model_returns_invalid_model(client) -> None:
     assert response.json()["error"]["code"] == "invalid_model"
 
 
-def test_chat_stream_not_implemented(client) -> None:
-    response = client.post(
+def test_chat_stream_returns_sse(client, monkeypatch, tmp_path) -> None:
+    fake = FakeOrchestrator(_mock_response(search_enabled=False, with_sources=False))
+    settings = Settings(
+        nesty_db_path=str(tmp_path / "chat_stream_contract.db"),
+        require_api_key=False,
+        rate_limit_enabled=False,
+    )
+    monkeypatch.setattr("app.api.chat.get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.chat.get_orchestrator", lambda: fake)
+    with client.stream(
+        "POST",
         "/v1/chat/completions",
         json={
             "model": "nesty-combined-1.0",
             "messages": [{"role": "user", "content": "hello"}],
             "stream": True,
         },
-    )
-    assert response.status_code == 501
-    assert response.json()["error"]["code"] == "streaming_not_implemented"
+    ) as response:
+        payload = "".join(response.iter_text())
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert "data: [DONE]" in payload
 
 
 def test_chat_invalid_search_mode(client) -> None:
