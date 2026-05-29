@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -27,6 +26,7 @@ from app.tools.registry import ToolRegistry
 from app.tools.search_intent import should_use_search
 from app.utils.ids import generate_chat_completion_id
 from app.utils.logging import log_safe
+from app.utils.sse import format_sse_data
 
 
 @dataclass
@@ -614,8 +614,8 @@ class ChatOrchestrator:
 
     @staticmethod
     def _to_sse(payload: dict[str, Any]) -> str:
-        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        return format_sse_data(payload)
 
     @staticmethod
     def _done_sse() -> str:
-        return "data: [DONE]\n\n"
+        return format_sse_data("[DONE]")

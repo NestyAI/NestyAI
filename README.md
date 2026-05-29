@@ -187,6 +187,50 @@ Streaming notes:
 - If output sanitation is detected, stream metadata indicates redaction and a guard notice chunk can be emitted.
 - Usage logging is recorded after stream completion when possible.
 
+## Streaming Client Examples (Phase 5.1)
+
+Reference client examples are available under `examples/`:
+
+- Python:
+  - `examples/python/chat_non_stream.py`
+  - `examples/python/chat_stream.py`
+- JavaScript (Node 18+):
+  - `examples/javascript/chat_non_stream.js`
+  - `examples/javascript/chat_stream_fetch.js`
+- Kotlin/Android reference:
+  - `examples/kotlin/android_sse_example.kt`
+
+Run Python stream example:
+
+```bash
+python examples/python/chat_stream.py
+```
+
+Run JavaScript stream example:
+
+```bash
+node examples/javascript/chat_stream_fetch.js
+```
+
+Stream event types:
+
+- `chat.completion.chunk`: incremental assistant delta tokens.
+- `chat.completion.metadata`: final NestyAI metadata (`guard`, `tools`, `sources`, `usage`).
+- `chat.completion.error`: stream interruption notification.
+- `[DONE]`: stream completion marker.
+
+Metadata may include:
+
+- `guard`
+- `tools`
+- `sources`
+- `usage`
+
+CORS note:
+
+- If you call NestyAI directly from browser/mobile web in development, configure CORS intentionally.
+- Do not use wildcard CORS in production when private API keys are involved.
+
 ## Run
 
 ```bash

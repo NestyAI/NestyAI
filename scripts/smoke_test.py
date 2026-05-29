@@ -8,6 +8,7 @@ import httpx
 
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 SMOKE_TEST_STREAM = os.getenv("SMOKE_TEST_STREAM", "false").strip().lower() in {"1", "true", "yes", "on"}
+NESTY_API_KEY = os.getenv("NESTY_API_KEY", "").strip()
 
 
 def _pass(msg: str) -> None:
@@ -26,6 +27,10 @@ def main() -> int:
     all_required_passed = True
 
     with httpx.Client(timeout=20.0) as client:
+        auth_headers = {}
+        if NESTY_API_KEY:
+            auth_headers["Authorization"] = f"Bearer {NESTY_API_KEY}"
+
         try:
             health = client.get(f"{BASE_URL}/health")
             if health.status_code == 200 and health.json().get("status") == "ok":
@@ -54,7 +59,7 @@ def main() -> int:
                 "messages": [{"role": "user", "content": "Hello from smoke test"}],
                 "search": "off",
             }
-            chat = client.post(f"{BASE_URL}/v1/chat/completions", json=payload)
+            chat = client.post(f"{BASE_URL}/v1/chat/completions", json=payload, headers=auth_headers)
             if chat.status_code == 200:
                 _pass("POST /v1/chat/completions (search=off)")
             else:
@@ -84,17 +89,46 @@ def main() -> int:
                     "search": "off",
                     "tools": "off",
                 }
-                with client.stream("POST", f"{BASE_URL}/v1/chat/completions", json=payload) as stream_resp:
+                with client.stream(
+                    "POST",
+                    f"{BASE_URL}/v1/chat/completions",
+                    json=payload,
+                    headers=auth_headers,
+                ) as stream_resp:
                     stream_text = "".join(stream_resp.iter_text())
-                    if stream_resp.status_code == 200 and "data: [DONE]" in stream_text:
+                    content_type = stream_resp.headers.get("content-type", "")
+                    data_lines = [line for line in stream_text.splitlines() if line.startswith("data: ")]
+                    has_done = any(line.strip() == "data: [DONE]" for line in data_lines)
+                    has_metadata = any('"object":"chat.completion.metadata"' in line for line in data_lines) or any(
+                        '"object": "chat.completion.metadata"' in line for line in data_lines
+                    )
+
+                    if (
+                        stream_resp.status_code == 200
+                        and "text/event-stream" in content_type
+                        and len(data_lines) > 0
+                        and has_done
+                    ):
                         _pass("POST /v1/chat/completions (stream=true)")
+                        if has_metadata:
+                            _pass("stream metadata event detected")
+                        else:
+                            _warn("stream metadata event not found in this response")
                     else:
                         error_code = ""
                         try:
-                            error_code = stream_resp.json().get("error", {}).get("code", "")
+                            parsed = stream_resp.json()
+                            error_code = parsed.get("error", {}).get("code", "")
                         except Exception:
                             error_code = ""
-                        if error_code in {"missing_api_key", "all_providers_failed", "provider_unavailable"}:
+                        if error_code in {
+                            "missing_api_key",
+                            "invalid_api_key",
+                            "all_providers_failed",
+                            "provider_unavailable",
+                            "stream_provider_failed",
+                            "streaming_not_supported",
+                        }:
                             _warn(
                                 "POST /v1/chat/completions stream mode requires configured provider key/network. "
                                 f"Current code: {error_code}"
