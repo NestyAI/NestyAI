@@ -368,8 +368,14 @@ def _prepare_conversation_context(
     auth_context: AuthContext | None,
 ) -> tuple[ChatCompletionRequest, str | None, bool, str, bool, str]:
     summary_mode = _normalize_summary_mode(request.summary)
+    request_api_key_id = auth_context.api_key_id if auth_context else None
     if not request.store:
-        request_without_store = request.model_copy(update={"conversation_summary_mode": summary_mode})
+        request_without_store = request.model_copy(
+            update={
+                "conversation_summary_mode": summary_mode,
+                "request_api_key_id": request_api_key_id,
+            }
+        )
         return request_without_store, None, False, summary_mode, False, ""
 
     latest_user_message = ""
@@ -438,6 +444,7 @@ def _prepare_conversation_context(
             "conversation_summary_mode": summary_mode,
             "conversation_summary_used": conversation_summary_used,
             "conversation_summary_updated": False,
+            "request_api_key_id": request_api_key_id,
         }
     )
     return (

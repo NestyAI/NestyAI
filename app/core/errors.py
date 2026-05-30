@@ -56,6 +56,9 @@ ERROR_CODES = {
     "embedding_generation_failed",
     "embedding_storage_failed",
     "embedding_config_invalid",
+    "invalid_semantic_recall_mode",
+    "semantic_recall_failed",
+    "semantic_recall_unavailable",
 }
 
 

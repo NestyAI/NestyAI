@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -275,3 +276,132 @@ def upsert_embedding_record(
             "updated_at": now,
         }
     return updated
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    if not a or not b:
+        return 0.0
+    if len(a) != len(b):
+        return 0.0
+    dot = 0.0
+    norm_a = 0.0
+    norm_b = 0.0
+    for x, y in zip(a, b):
+        dot += x * y
+        norm_a += x * x
+        norm_b += y * y
+    if norm_a <= 0.0 or norm_b <= 0.0:
+        return 0.0
+    return dot / (math.sqrt(norm_a) * math.sqrt(norm_b))
+
+
+def search_similar_embeddings(
+    query_embedding: list[float],
+    api_key_id: str | None,
+    owner_type: str = "conversation_message",
+    conversation_id: str | None = None,
+    scope: str = "conversation",
+    top_k: int = 5,
+    min_score: float = 0.72,
+    include_roles: list[str] | None = None,
+    exclude_owner_ids: list[str] | None = None,
+    candidate_limit: int = 500,
+    db_path: str | None = None,
+) -> list[dict[str, Any]]:
+    query_dim = len(query_embedding)
+    if query_dim <= 0:
+        return []
+    scope_mode = str(scope or "conversation").strip().lower()
+    if scope_mode not in {"conversation", "api_key", "all_accessible"}:
+        scope_mode = "conversation"
+    top_k = max(1, int(top_k))
+    candidate_limit = max(top_k, int(candidate_limit))
+    include_roles_clean = [str(role).strip().lower() for role in (include_roles or []) if str(role).strip()]
+    exclude_ids = [str(item).strip() for item in (exclude_owner_ids or []) if str(item).strip()]
+
+    sql = """
+        SELECT
+            e.id,
+            e.owner_type,
+            e.owner_id,
+            e.api_key_id,
+            e.provider,
+            e.model,
+            e.dimensions,
+            e.embedding_json,
+            e.metadata,
+            m.conversation_id,
+            m.role,
+            m.content,
+            m.created_at
+        FROM embedding_records e
+        JOIN conversation_messages m ON m.id = e.owner_id
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE e.owner_type = ?
+          AND c.archived_at IS NULL
+    """
+    params: list[Any] = [owner_type]
+
+    # Ownership boundary: never cross API key ownership.
+    if api_key_id is None:
+        sql += " AND c.api_key_id IS NULL"
+    else:
+        sql += " AND c.api_key_id = ?"
+        params.append(api_key_id)
+
+    if scope_mode == "conversation":
+        if not conversation_id:
+            return []
+        sql += " AND m.conversation_id = ?"
+        params.append(conversation_id)
+    elif scope_mode in {"api_key", "all_accessible"}:
+        # Ownership filter above already enforces accessible boundaries for current caller.
+        pass
+
+    if include_roles_clean:
+        placeholders = ",".join("?" for _ in include_roles_clean)
+        sql += f" AND LOWER(m.role) IN ({placeholders})"
+        params.extend(include_roles_clean)
+
+    if exclude_ids:
+        placeholders = ",".join("?" for _ in exclude_ids)
+        sql += f" AND e.owner_id NOT IN ({placeholders})"
+        params.extend(exclude_ids)
+
+    sql += " ORDER BY e.updated_at DESC LIMIT ?"
+    params.append(candidate_limit)
+
+    with get_connection(_effective_db_path(db_path)) as conn:
+        rows = conn.execute(sql, tuple(params)).fetchall()
+
+    matches: list[dict[str, Any]] = []
+    for row in rows:
+        embedding = _safe_parse_embedding(row["embedding_json"])
+        if not embedding:
+            continue
+        dimensions = int(row["dimensions"]) if row["dimensions"] is not None else len(embedding)
+        if dimensions != query_dim or len(embedding) != query_dim:
+            continue
+        score = cosine_similarity(query_embedding, embedding)
+        if score < float(min_score):
+            continue
+        matches.append(
+            {
+                "id": row["id"],
+                "owner_type": row["owner_type"],
+                "owner_id": row["owner_id"],
+                "api_key_id": row["api_key_id"],
+                "provider": row["provider"],
+                "model": row["model"],
+                "dimensions": dimensions,
+                "score": score,
+                "metadata": _safe_parse_json_object(row["metadata"]),
+                "conversation_id": row["conversation_id"],
+                "role": row["role"],
+                "content": row["content"],
+                "created_at": row["created_at"],
+            }
+        )
+
+    matches.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
+    return matches[:top_k]

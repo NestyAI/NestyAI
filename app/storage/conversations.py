@@ -778,6 +778,25 @@ def _search_messages_like(
     ]
 
 
+def get_recent_message_ids(
+    conversation_id: str,
+    limit: int = 20,
+    db_path: str | None = None,
+) -> list[str]:
+    with get_connection(_effective_db_path(db_path)) as conn:
+        rows = conn.execute(
+            """
+            SELECT id
+            FROM conversation_messages
+            WHERE conversation_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (conversation_id, max(1, int(limit))),
+        ).fetchall()
+    return [str(row["id"]) for row in rows]
+
+
 def _search_messages_fts(
     api_key_id: str | None,
     query: str,

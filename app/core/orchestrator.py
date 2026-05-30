@@ -13,10 +13,12 @@ from app.core.multi_model_orchestrator import NestyProMultiModelOrchestrator, sh
 from app.core.prompt_builder import (
     append_behavior_instruction,
     append_external_context,
+    append_semantic_recall_context,
     append_tool_context,
     ensure_system_message,
 )
 from app.core.router import ProviderRouter
+from app.core.semantic_recall import retrieve_semantic_memories, should_use_semantic_recall
 from app.guards.context_guard import ContextGuard
 from app.guards.input_guard import InputGuard
 from app.guards.output_guard import OutputGuard
@@ -28,9 +30,11 @@ from app.schemas.chat import (
     ConversationInfo,
     GuardInfo,
     OrchestrationInfo,
+    SemanticRecallInfo,
     Usage,
 )
 from app.schemas.tools import SearchResult, SourceItem, ToolExecutionMetadata, ToolMetadata
+from app.storage.db import get_connection
 from app.tools.planner import plan_tools
 from app.tools.registry import ToolRegistry
 from app.tools.search_intent import should_use_search
@@ -55,6 +59,7 @@ class StreamOutcome:
     conversation_summary_used: bool = False
     conversation_summary_updated: bool = False
     orchestration: OrchestrationInfo = field(default_factory=OrchestrationInfo)
+    semantic_recall: SemanticRecallInfo = field(default_factory=SemanticRecallInfo)
 
 
 @dataclass
@@ -116,7 +121,7 @@ class ChatOrchestrator:
 
         started_at = time.perf_counter()
         tools_mode = self._normalize_and_validate_request(request)
-        messages, input_guard_info, tools_meta, sources = await self._prepare_chat_context(
+        messages, input_guard_info, tools_meta, sources, semantic_recall = await self._prepare_chat_context(
             request_id=request_id,
             request=request,
             tools_mode=tools_mode,
@@ -242,6 +247,7 @@ class ChatOrchestrator:
                 tools=tools_meta,
                 sources=self._dedupe_sources(sources),
                 orchestration=orchestration,
+                semantic_recall=semantic_recall,
             )
         except APIError as exc:
             log_safe(
@@ -268,7 +274,7 @@ class ChatOrchestrator:
             )
         request = request.model_copy(update=apply_behavior_defaults(request, model_profile_obj.model_dump()))
         tools_mode = self._normalize_and_validate_request(request)
-        messages, input_guard_info, tools_meta, sources = await self._prepare_chat_context(
+        messages, input_guard_info, tools_meta, sources, semantic_recall = await self._prepare_chat_context(
             request_id=request_id,
             request=request,
             tools_mode=tools_mode,
@@ -307,6 +313,7 @@ class ChatOrchestrator:
             conversation_summary_used=request.conversation_summary_used if request.store else False,
             conversation_summary_updated=request.conversation_summary_updated if request.store else False,
             orchestration=self._orchestration_info_from_decision(decision),
+            semantic_recall=semantic_recall,
         )
 
         async def stream_events() -> AsyncIterator[str]:
@@ -431,6 +438,7 @@ class ChatOrchestrator:
                     "sources": [item.model_dump() for item in outcome.sources],
                     "usage": outcome.usage.model_dump(),
                     "orchestration": outcome.orchestration.model_dump(),
+                    "semantic_recall": outcome.semantic_recall.model_dump(),
                     "conversation": (
                         ConversationInfo(
                             id=outcome.conversation_id,
@@ -462,6 +470,13 @@ class ChatOrchestrator:
                 message="Orchestration mode must be one of: auto, off, force.",
                 status_code=400,
             )
+        semantic_recall_mode = str(request.semantic_recall or "auto").strip().lower()
+        if semantic_recall_mode not in {"auto", "off", "on"}:
+            raise APIError(
+                code="invalid_semantic_recall_mode",
+                message="Semantic recall mode must be one of: auto, off, on.",
+                status_code=400,
+            )
         return self._normalize_tools_mode(request.tools)
 
     async def _prepare_chat_context(
@@ -469,7 +484,7 @@ class ChatOrchestrator:
         request_id: str,
         request: ChatCompletionRequest,
         tools_mode: str | list[str],
-    ) -> tuple[list[ChatMessage], GuardInfo, ToolMetadata, list[SourceItem]]:
+    ) -> tuple[list[ChatMessage], GuardInfo, ToolMetadata, list[SourceItem], SemanticRecallInfo]:
         model_profile = self._resolve_model_profile(request.model)
         if not model_profile:
             raise APIError(
@@ -485,11 +500,112 @@ class ChatOrchestrator:
         input_guard_info = GuardInfo()
         tools_meta = ToolMetadata()
         sources: list[SourceItem] = []
+        semantic_recall_info = SemanticRecallInfo(
+            enabled=bool(getattr(self.settings, "semantic_recall_enabled", False)),
+            requested=str(request.semantic_recall or "auto"),
+            used=False,
+            reason="disabled_global",
+            matches_count=0,
+            top_k=max(1, int(getattr(self.settings, "semantic_recall_top_k", 5))),
+            min_score=float(getattr(self.settings, "semantic_recall_min_score", 0.72)),
+            max_score=None,
+        )
 
         if self.enable_input_guard:
             messages, input_guard_info = self.input_guard.scan_messages(messages)
 
         latest_user_message = self._latest_user_message(messages)
+        semantic_decision = should_use_semantic_recall(
+            request=request,
+            model_config=model_profile_dict,
+            context_metadata={"latest_user_message": latest_user_message},
+            config=self.settings,
+        )
+        semantic_recall_info = SemanticRecallInfo(
+            enabled=bool(semantic_decision.get("enabled")),
+            requested=str(semantic_decision.get("requested") or request.semantic_recall or "auto"),
+            used=False,
+            reason=str(semantic_decision.get("reason") or "disabled_global"),
+            matches_count=0,
+            top_k=max(1, int(getattr(self.settings, "semantic_recall_top_k", 5))),
+            min_score=float(getattr(self.settings, "semantic_recall_min_score", 0.72)),
+            max_score=None,
+        )
+        if semantic_decision.get("should_use"):
+            exclude_message_ids: list[str] = []
+            if bool(getattr(self.settings, "semantic_recall_exclude_current_conversation_recent", True)):
+                conversation_id = str(request.conversation_id or "").strip()
+                if conversation_id:
+                    try:
+                        exclude_message_ids = self._get_recent_message_ids(
+                            conversation_id=conversation_id,
+                            limit=max(1, int(getattr(self.settings, "conversation_history_max_messages", 20))),
+                        )
+                    except Exception:
+                        exclude_message_ids = []
+            try:
+                recall_result = await retrieve_semantic_memories(
+                    latest_user_message=latest_user_message,
+                    api_key_id=request.request_api_key_id,
+                    conversation_id=request.conversation_id,
+                    config=self.settings,
+                    request_semantic_recall=request.semantic_recall,
+                    exclude_message_ids=exclude_message_ids,
+                )
+            except Exception:
+                recall_result = {
+                    "enabled": bool(semantic_decision.get("enabled")),
+                    "requested": str(semantic_decision.get("requested") or request.semantic_recall or "auto"),
+                    "used": False,
+                    "reason": "semantic_recall_failed",
+                    "top_k": max(1, int(getattr(self.settings, "semantic_recall_top_k", 5))),
+                    "min_score": float(getattr(self.settings, "semantic_recall_min_score", 0.72)),
+                    "matches": [],
+                    "context_text": "",
+                }
+            matches = list(recall_result.get("matches") or [])
+            context_text = str(recall_result.get("context_text") or "").strip()
+            if recall_result.get("used") and context_text:
+                # Treat semantic memory as untrusted contextual data, same as external context safety path.
+                context_sanitized, _meta = self.context_guard.sanitize_external_context(
+                    search_results=[
+                        SearchResult(
+                            title=f"Memory {idx + 1}",
+                            url=f"memory://{item.get('message_id') or item.get('conversation_id') or idx}",
+                            snippet=str(item.get("content") or ""),
+                        )
+                        for idx, item in enumerate(matches)
+                    ],
+                    max_context_chars=max(1, int(getattr(self.settings, "semantic_recall_max_context_chars", 4000))),
+                )
+                if context_sanitized:
+                    rebuilt_context = self._rebuild_memory_context(matches, context_sanitized)
+                    messages = append_semantic_recall_context(messages, rebuilt_context or context_text)
+                else:
+                    messages = append_semantic_recall_context(messages, context_text)
+                max_score = max(float(item.get("score") or 0.0) for item in matches) if matches else None
+                semantic_recall_info = SemanticRecallInfo(
+                    enabled=bool(recall_result.get("enabled")),
+                    requested=str(recall_result.get("requested") or request.semantic_recall or "auto"),
+                    used=True,
+                    reason=str(recall_result.get("reason") or "semantic_recall_enabled"),
+                    matches_count=len(matches),
+                    top_k=int(recall_result.get("top_k") or semantic_recall_info.top_k),
+                    min_score=float(recall_result.get("min_score") or semantic_recall_info.min_score),
+                    max_score=max_score,
+                )
+            else:
+                semantic_recall_info = SemanticRecallInfo(
+                    enabled=bool(recall_result.get("enabled")),
+                    requested=str(recall_result.get("requested") or request.semantic_recall or "auto"),
+                    used=False,
+                    reason=str(recall_result.get("reason") or "no_matches"),
+                    matches_count=0,
+                    top_k=int(recall_result.get("top_k") or semantic_recall_info.top_k),
+                    min_score=float(recall_result.get("min_score") or semantic_recall_info.min_score),
+                    max_score=None,
+                )
+
         messages, search_sources, search_used_tools = await self._maybe_apply_search_context(
             messages=messages,
             request=request,
@@ -519,7 +635,7 @@ class ChatOrchestrator:
         if tool_context_text:
             messages = append_tool_context(messages, tool_context_text)
 
-        return messages, input_guard_info, tools_meta, sources
+        return messages, input_guard_info, tools_meta, sources, semantic_recall_info
 
     def _normalize_tools_mode(self, tools_field: str | list[str]) -> str | list[str]:
         if isinstance(tools_field, str):
@@ -815,6 +931,42 @@ class ChatOrchestrator:
             role_latency_ms=None,
             reason=reason or None,
         )
+
+    @staticmethod
+    def _rebuild_memory_context(matches: list[dict[str, Any]], sanitized_block: str) -> str:
+        # Keep deterministic memory labels/scores while using sanitized snippet text.
+        lines = [line.strip() for line in sanitized_block.splitlines() if line.strip()]
+        rebuilt: list[str] = []
+        snippet_index = 0
+        for idx, item in enumerate(matches, start=1):
+            score = float(item.get("score") or 0.0)
+            role = str(item.get("role") or "unknown")
+            created_at = str(item.get("created_at") or "")
+            snippet = ""
+            while snippet_index < len(lines):
+                line = lines[snippet_index]
+                snippet_index += 1
+                if line.startswith("Snippet:"):
+                    snippet = line.replace("Snippet:", "", 1).strip()
+                    break
+            if not snippet:
+                snippet = " "
+            rebuilt.append(f"[Memory {idx} | score={score:.2f} | role={role} | date={created_at}]\n{snippet}")
+        return "\n\n".join(rebuilt).strip()
+
+    def _get_recent_message_ids(self, conversation_id: str, limit: int) -> list[str]:
+        with get_connection(self.settings.nesty_db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT id
+                FROM conversation_messages
+                WHERE conversation_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (conversation_id, max(1, int(limit))),
+            ).fetchall()
+        return [str(row["id"]) for row in rows]
 
     @staticmethod
     def _to_sse(payload: dict[str, Any]) -> str:

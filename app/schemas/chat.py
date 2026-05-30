@@ -20,9 +20,11 @@ class ChatCompletionRequest(BaseModel):
     search: str = "auto"
     tools: str | list[str] = "auto"
     orchestration: str = "auto"
+    semantic_recall: str = "auto"
     conversation_id: str | None = None
     store: bool = False
     summary: str = "auto"
+    request_api_key_id: str | None = Field(default=None, exclude=True)
     conversation_created: bool = Field(default=False, exclude=True)
     conversation_summary_used: bool = Field(default=False, exclude=True)
     conversation_summary_updated: bool = Field(default=False, exclude=True)
@@ -75,6 +77,17 @@ class OrchestrationInfo(BaseModel):
     reason: str | None = None
 
 
+class SemanticRecallInfo(BaseModel):
+    enabled: bool = False
+    requested: str = "auto"
+    used: bool = False
+    reason: str | None = None
+    matches_count: int = 0
+    top_k: int = 0
+    min_score: float = 0.0
+    max_score: float | None = None
+
+
 class ChatCompletionResponse(BaseModel):
     id: str
     object: str = "chat.completion"
@@ -87,5 +100,6 @@ class ChatCompletionResponse(BaseModel):
     tools: ToolMetadata = Field(default_factory=ToolMetadata)
     sources: list[SourceItem] = Field(default_factory=list)
     orchestration: OrchestrationInfo | None = None
+    semantic_recall: SemanticRecallInfo | None = None
     auth: AuthDebugInfo | None = None
     conversation: ConversationInfo | None = None

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.core.embedding_service import generate_embedding
 from app.core.errors import APIError
+from app.core.semantic_recall import retrieve_semantic_memories
 from app.deps import get_settings
 from app.security.internal_auth import require_internal_admin
 
@@ -20,6 +21,15 @@ class InternalEmbeddingTestRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     provider: str | None = None
     model: str | None = None
+
+
+class InternalRecallTestRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    conversation_id: str | None = None
+    scope: str = Field(default="conversation")
+    top_k: int = Field(default=5, ge=1, le=20)
+    min_score: float = Field(default=0.72, ge=0.0, le=1.0)
+    api_key_id: str | None = None
 
 
 @router.post("/test")
@@ -51,4 +61,57 @@ async def test_embedding_provider(body: InternalEmbeddingTestRequest) -> dict:
         "model": result.model,
         "dimensions": result.dimensions,
         "latency_ms": result.latency_ms,
+    }
+
+
+@router.post("/recall-test")
+async def test_semantic_recall(body: InternalRecallTestRequest) -> dict:
+    settings = get_settings()
+    if not settings.semantic_recall_enabled:
+        raise APIError(
+            code="semantic_recall_unavailable",
+            message="Semantic recall is disabled.",
+            status_code=400,
+        )
+
+    scope = str(body.scope or settings.semantic_recall_scope or "conversation").strip().lower()
+    if scope not in {"conversation", "api_key", "all_accessible"}:
+        raise APIError(
+            code="semantic_recall_failed",
+            message="Invalid semantic recall scope.",
+            status_code=400,
+        )
+
+    effective_config = type("RecallCfg", (), settings.model_dump() if hasattr(settings, "model_dump") else dict(settings.__dict__))()
+    effective_config.semantic_recall_scope = scope
+    effective_config.semantic_recall_top_k = int(body.top_k)
+    effective_config.semantic_recall_min_score = float(body.min_score)
+    recall = await retrieve_semantic_memories(
+        latest_user_message=body.text,
+        api_key_id=body.api_key_id,
+        conversation_id=body.conversation_id,
+        config=effective_config,
+        request_semantic_recall="on",
+        exclude_message_ids=[],
+    )
+
+    matches = []
+    for item in recall.get("matches") or []:
+        preview = str(item.get("content") or "").strip()
+        if len(preview) > 200:
+            preview = preview[:200].rstrip() + "..."
+        matches.append(
+            {
+                "message_id": item.get("message_id"),
+                "conversation_id": item.get("conversation_id"),
+                "role": item.get("role"),
+                "score": float(item.get("score") or 0.0),
+                "content_preview": preview,
+            }
+        )
+    return {
+        "ok": True,
+        "query_embedded": bool(recall.get("query_embedded")),
+        "reason": str(recall.get("reason") or ""),
+        "matches": matches,
     }

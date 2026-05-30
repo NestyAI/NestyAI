@@ -4,7 +4,6 @@ import hashlib
 from typing import Any
 
 from app.core.errors import APIError, MissingAPIKeyError, ProviderError
-from app.deps import get_settings
 from app.embeddings.provider import build_embedding_provider, sanitize_embedding_usage
 from app.schemas.embeddings import EmbeddingResult
 from app.storage.embeddings import upsert_embedding_record
@@ -12,6 +11,12 @@ from app.utils.logging import get_logger, log_safe
 
 
 logger = get_logger("nesty.embedding_service")
+
+
+def get_settings():
+    from app.deps import get_settings as deps_get_settings
+
+    return deps_get_settings()
 
 
 def normalize_embedding_text(text: str, max_chars: int) -> str:

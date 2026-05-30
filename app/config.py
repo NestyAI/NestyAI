@@ -78,6 +78,14 @@ class Settings(BaseModel):
     embeddings_max_input_chars: int = 8000
     embeddings_store_message_embeddings: bool = False
     embeddings_backfill_batch_size: int = 50
+    semantic_recall_enabled: bool = False
+    semantic_recall_top_k: int = 5
+    semantic_recall_min_score: float = 0.72
+    semantic_recall_max_context_chars: int = 4000
+    semantic_recall_scope: str = "conversation"
+    semantic_recall_include_roles: list[str] = Field(default_factory=lambda: ["user", "assistant"])
+    semantic_recall_exclude_current_conversation_recent: bool = True
+    semantic_recall_candidate_limit: int = 500
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -155,6 +163,20 @@ class Settings(BaseModel):
             embeddings_max_input_chars=int(os.getenv("EMBEDDINGS_MAX_INPUT_CHARS", "8000")),
             embeddings_store_message_embeddings=_to_bool(os.getenv("EMBEDDINGS_STORE_MESSAGE_EMBEDDINGS"), False),
             embeddings_backfill_batch_size=int(os.getenv("EMBEDDINGS_BACKFILL_BATCH_SIZE", "50")),
+            semantic_recall_enabled=_to_bool(os.getenv("SEMANTIC_RECALL_ENABLED"), False),
+            semantic_recall_top_k=int(os.getenv("SEMANTIC_RECALL_TOP_K", "5")),
+            semantic_recall_min_score=float(os.getenv("SEMANTIC_RECALL_MIN_SCORE", "0.72")),
+            semantic_recall_max_context_chars=int(os.getenv("SEMANTIC_RECALL_MAX_CONTEXT_CHARS", "4000")),
+            semantic_recall_scope=os.getenv("SEMANTIC_RECALL_SCOPE", "conversation"),
+            semantic_recall_include_roles=[
+                item.strip()
+                for item in str(os.getenv("SEMANTIC_RECALL_INCLUDE_ROLES", "user,assistant")).split(",")
+                if item.strip()
+            ],
+            semantic_recall_exclude_current_conversation_recent=_to_bool(
+                os.getenv("SEMANTIC_RECALL_EXCLUDE_CURRENT_CONVERSATION_RECENT"), True
+            ),
+            semantic_recall_candidate_limit=int(os.getenv("SEMANTIC_RECALL_CANDIDATE_LIMIT", "500")),
         )
 
 

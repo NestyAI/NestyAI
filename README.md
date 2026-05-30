@@ -10,7 +10,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python" />
   <img src="https://img.shields.io/badge/FastAPI-Production%20Ready-009688" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/tests-213%2B%20passed-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-253%2B%20passed-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/API-OpenAI%20Compatible-orange" alt="OpenAI Compatible" />
   <img src="https://img.shields.io/badge/streaming-SSE-ff9800" alt="SSE" />
 </p>
@@ -338,6 +338,62 @@ Privacy and scope notes:
 - No semantic recall injection into prompts yet.
 - Candidate embedding model `nvidia/llama-nemotron-embed-vl-1b-v2:free` is used only by embedding subsystem, not chat provider chains.
 
+## Phase 7.2: Semantic Recall
+
+Semantic recall is optional memory retrieval over locally stored embeddings and sanitized conversation messages.
+
+Memory layers:
+
+- Recent history: latest raw conversation turns from current session scope.
+- Conversation summary: compressed context snapshot maintained by summarizer flow.
+- FTS search: keyword/token match over stored conversation text.
+- Semantic recall: cosine similarity over local embedding records (no external vector DB in this phase).
+
+Environment flags:
+
+```bash
+SEMANTIC_RECALL_ENABLED=false
+SEMANTIC_RECALL_TOP_K=5
+SEMANTIC_RECALL_MIN_SCORE=0.72
+SEMANTIC_RECALL_MAX_CONTEXT_CHARS=4000
+SEMANTIC_RECALL_SCOPE=conversation
+SEMANTIC_RECALL_INCLUDE_ROLES=user,assistant
+SEMANTIC_RECALL_EXCLUDE_CURRENT_CONVERSATION_RECENT=true
+SEMANTIC_RECALL_CANDIDATE_LIMIT=500
+```
+
+Request mode:
+
+- `semantic_recall=auto`
+- `semantic_recall=on`
+- `semantic_recall=off`
+
+Example:
+
+```json
+{
+  "model": "nesty-combined-1.0",
+  "conversation_id": "conv_...",
+  "store": true,
+  "semantic_recall": "auto",
+  "messages": [{"role":"user","content":"What did I say earlier about the provider chain?"}]
+}
+```
+
+Notes:
+
+- Disabled by default.
+- Requires embeddings to exist (from prior traffic or `scripts/rebuild_embeddings.py`).
+- Local cosine similarity in SQLite-backed records is intended for small personal deployments.
+- No external vector DB integration in this phase.
+
+Useful commands:
+
+```bash
+python scripts/rebuild_embeddings.py
+python scripts/test_semantic_recall.py --text "What did I say earlier about providers?"
+```
+
 ## Docs And Examples
 
 - Full technical documentation: [`docs/README_TECHNICAL.md`](docs/README_TECHNICAL.md)
@@ -347,10 +403,10 @@ Privacy and scope notes:
 
 ## Quality Status
 
-- Test suite: **213+ passed**
+- Test suite: **253+ passed**
 - Streaming contract: enabled
 - Conversation controls/search: enabled
 
 ## Roadmap
 
-Next target: Phase 7 semantic memory foundation (embeddings + vector retrieval policy), while preserving current guardrails and API compatibility.
+Next target: Phase 7.3 semantic memory quality controls and ranking calibration.
