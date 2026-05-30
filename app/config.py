@@ -101,6 +101,17 @@ class Settings(BaseModel):
     provider_health_failure_threshold: int = 2
     provider_health_skip_statuses: str = "failed,unavailable,timeout"
     provider_health_allow_stale_after_seconds: int = 3600
+    provider_reliability_scoring_enabled: bool = True
+    provider_reliability_window_checks: int = 20
+    provider_reliability_min_checks: int = 3
+    provider_reliability_recency_weight: float = 0.65
+    provider_reliability_latency_weight: float = 0.20
+    provider_reliability_stability_weight: float = 0.15
+    provider_reliability_ok_score: float = 1.0
+    provider_reliability_failed_score: float = 0.0
+    provider_reliability_unavailable_score: float = 0.0
+    provider_reliability_timeout_score: float = 0.0
+    provider_reliability_skipped_score: float = 0.4
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -211,6 +222,17 @@ class Settings(BaseModel):
             provider_health_allow_stale_after_seconds=int(
                 os.getenv("PROVIDER_HEALTH_ALLOW_STALE_AFTER_SECONDS", "3600")
             ),
+            provider_reliability_scoring_enabled=_to_bool(os.getenv("PROVIDER_RELIABILITY_SCORING_ENABLED"), True),
+            provider_reliability_window_checks=int(os.getenv("PROVIDER_RELIABILITY_WINDOW_CHECKS", "20")),
+            provider_reliability_min_checks=int(os.getenv("PROVIDER_RELIABILITY_MIN_CHECKS", "3")),
+            provider_reliability_recency_weight=float(os.getenv("PROVIDER_RELIABILITY_RECENCY_WEIGHT", "0.65")),
+            provider_reliability_latency_weight=float(os.getenv("PROVIDER_RELIABILITY_LATENCY_WEIGHT", "0.20")),
+            provider_reliability_stability_weight=float(os.getenv("PROVIDER_RELIABILITY_STABILITY_WEIGHT", "0.15")),
+            provider_reliability_ok_score=float(os.getenv("PROVIDER_RELIABILITY_OK_SCORE", "1.0")),
+            provider_reliability_failed_score=float(os.getenv("PROVIDER_RELIABILITY_FAILED_SCORE", "0.0")),
+            provider_reliability_unavailable_score=float(os.getenv("PROVIDER_RELIABILITY_UNAVAILABLE_SCORE", "0.0")),
+            provider_reliability_timeout_score=float(os.getenv("PROVIDER_RELIABILITY_TIMEOUT_SCORE", "0.0")),
+            provider_reliability_skipped_score=float(os.getenv("PROVIDER_RELIABILITY_SKIPPED_SCORE", "0.4")),
         )
 
 

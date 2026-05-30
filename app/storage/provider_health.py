@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -164,8 +165,11 @@ def list_provider_health_checks(
     sql += " ORDER BY checked_at DESC LIMIT ? OFFSET ?"
     params.extend([max(1, int(limit)), max(0, int(offset))])
 
-    with get_connection(_effective_db_path(db_path)) as conn:
-        rows = conn.execute(sql, tuple(params)).fetchall()
+    try:
+        with get_connection(_effective_db_path(db_path)) as conn:
+            rows = conn.execute(sql, tuple(params)).fetchall()
+    except sqlite3.OperationalError:
+        return []
     return [
         {
             "id": row["id"],
@@ -223,8 +227,11 @@ def get_latest_provider_health(
          AND ph.checked_at = latest.max_checked_at
         ORDER BY ph.checked_at DESC
     """
-    with get_connection(_effective_db_path(db_path)) as conn:
-        rows = conn.execute(sql, tuple(params)).fetchall()
+    try:
+        with get_connection(_effective_db_path(db_path)) as conn:
+            rows = conn.execute(sql, tuple(params)).fetchall()
+    except sqlite3.OperationalError:
+        return []
     return [
         {
             "id": row["id"],
@@ -243,6 +250,76 @@ def get_latest_provider_health(
         }
         for row in rows
     ]
+
+
+def list_recent_health_samples(
+    provider: str | None = None,
+    model_alias: str | None = None,
+    limit_per_target: int = 20,
+    since_seconds: int | None = None,
+    db_path: str | None = None,
+) -> list[dict[str, Any]]:
+    sql = """
+        SELECT id, provider, model, model_alias, role, status, error_code, error_message,
+               latency_ms, output_chars, tokens_per_second, checked_at, metadata
+        FROM provider_health_checks
+        WHERE 1=1
+    """
+    params: list[Any] = []
+    if provider:
+        sql += " AND provider = ?"
+        params.append(str(provider).strip())
+    if model_alias:
+        sql += " AND model_alias = ?"
+        params.append(str(model_alias).strip())
+    since_iso = _since_iso(since_seconds)
+    if since_iso:
+        sql += " AND checked_at >= ?"
+        params.append(since_iso)
+    
+    sql += " ORDER BY checked_at DESC"
+    
+    rows = []
+    try:
+        with get_connection(_effective_db_path(db_path)) as conn:
+            rows = conn.execute(sql, tuple(params)).fetchall()
+    except sqlite3.OperationalError:
+        return []
+        
+    grouped: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+    result = []
+    
+    for row in rows:
+        r_provider = row["provider"]
+        r_model = row["model"]
+        r_alias = row["model_alias"] or ""
+        r_role = row["role"] or ""
+        key = (r_provider, r_model, r_alias, r_role)
+        
+        if key not in grouped:
+            grouped[key] = []
+            
+        if len(grouped[key]) < limit_per_target:
+            grouped[key].append({
+                "id": row["id"],
+                "provider": row["provider"],
+                "model": row["model"],
+                "model_alias": row["model_alias"],
+                "role": row["role"],
+                "status": row["status"],
+                "error_code": row["error_code"],
+                "error_message": row["error_message"],
+                "latency_ms": int(row["latency_ms"]) if row["latency_ms"] is not None else None,
+                "output_chars": int(row["output_chars"] or 0),
+                "tokens_per_second": float(row["tokens_per_second"]) if row["tokens_per_second"] is not None else None,
+                "checked_at": row["checked_at"],
+                "metadata": _safe_parse_metadata(row["metadata"]),
+            })
+            
+    for target_rows in grouped.values():
+        result.extend(target_rows)
+        
+    return result
 
 
 def summarize_provider_health(
@@ -264,38 +341,51 @@ def summarize_provider_health(
         where += " AND checked_at >= ?"
         params.append(since_iso)
 
-    with get_connection(_effective_db_path(db_path)) as conn:
-        total_row = conn.execute(f"SELECT COUNT(*) AS total FROM provider_health_checks{where}", tuple(params)).fetchone()
-        status_rows = conn.execute(
-            f"""
-            SELECT status, COUNT(*) AS count
-            FROM provider_health_checks
-            {where}
-            GROUP BY status
-            """,
-            tuple(params),
-        ).fetchall()
-        provider_rows = conn.execute(
-            f"""
-            SELECT provider,
-                   COUNT(*) AS total,
-                   AVG(CASE WHEN latency_ms IS NOT NULL THEN latency_ms END) AS avg_latency_ms
-            FROM provider_health_checks
-            {where}
-            GROUP BY provider
-            ORDER BY provider ASC
-            """,
-            tuple(params),
-        ).fetchall()
-        latency_row = conn.execute(
-            f"""
-            SELECT AVG(CASE WHEN latency_ms IS NOT NULL THEN latency_ms END) AS avg_latency_ms
-            FROM provider_health_checks
-            {where}
-            """,
-            tuple(params),
-        ).fetchone()
-    status_counts = {str(row["status"]): int(row["count"] or 0) for row in status_rows}
+    try:
+        with get_connection(_effective_db_path(db_path)) as conn:
+            total_row = conn.execute(f"SELECT COUNT(*) AS total FROM provider_health_checks{where}", tuple(params)).fetchone()
+            status_rows = conn.execute(
+                f"""
+                SELECT status, COUNT(*) AS count
+                FROM provider_health_checks
+                {where}
+                GROUP BY status
+                """,
+                tuple(params),
+            ).fetchall()
+            provider_rows = conn.execute(
+                f"""
+                SELECT provider,
+                       COUNT(*) AS total,
+                       AVG(CASE WHEN latency_ms IS NOT NULL THEN latency_ms END) AS avg_latency_ms
+                FROM provider_health_checks
+                {where}
+                GROUP BY provider
+                ORDER BY provider ASC
+                """,
+                tuple(params),
+            ).fetchall()
+            latency_row = conn.execute(
+                f"""
+                SELECT AVG(CASE WHEN latency_ms IS NOT NULL THEN latency_ms END) AS avg_latency_ms
+                FROM provider_health_checks
+                {where}
+                """,
+                tuple(params),
+            ).fetchone()
+        status_counts = {str(row["status"]): int(row["count"] or 0) for row in status_rows}
+    except sqlite3.OperationalError:
+        return {
+            "total_checks": 0,
+            "ok": 0,
+            "failed": 0,
+            "unavailable": 0,
+            "timeout": 0,
+            "skipped": 0,
+            "status_counts": {},
+            "avg_latency_ms": None,
+            "providers": [],
+        }
     return {
         "total_checks": int(total_row["total"] or 0) if total_row else 0,
         "ok": int(status_counts.get("ok", 0)),

@@ -246,6 +246,25 @@ Semantic recall requires:
   - strict mode can block all skipped targets safely with structured error
 - stream and non-stream flows keep the same API contract; provider health metadata is additive only
 
+### Provider reliability scoring (Phase 8.3)
+
+- Local, passive reliability scoring computed from diagnostic sample history (between `0.0` and `1.0`).
+- No change to runtime provider routing decisions (passive-only metadata in this phase).
+- Integrates weights for:
+  - **Recency**: Recent statuses are decay-weighted higher than older checks.
+  - **Latency**: Mild penalty applied to high-latency successful checks.
+  - **Stability**: Variation analysis of success rates across check windows.
+- Confidence levels:
+  - `insufficient_data`: Fewer than `PROVIDER_RELIABILITY_MIN_CHECKS` checks.
+  - `low`: Min checks to 5 checks.
+  - `medium`: 6 to 10 checks.
+  - `high`: Greater than 10 checks.
+- View scores via CLI summary tool:
+  ```bash
+  python scripts/provider_health_summary.py --show-reliability
+  ```
+- Summary endpoint: Reliability arrays are appended to `/internal/diagnostics/provider-health/summary`.
+
 ---
 
 ## Internal Admin APIs
