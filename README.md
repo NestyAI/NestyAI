@@ -163,6 +163,34 @@ python scripts/rebuild_fts.py --db data/nesty.db
 
 FTS in Phase 7.0 is fully local SQLite and does not call any cloud AI service.
 
+## Phase 7.0a: Model Behavior Profiles
+
+NestyAI model aliases now have explicit behavior profiles:
+
+- `nesty-flash-1.0`: fastest lightweight profile, concise responses, conservative auto search/tools.
+- `nesty-combined-1.0`: balanced default profile for general usage.
+- `nesty-pro-1.0`: premium profile with optional non-streaming multi-model synthesis.
+
+Public API remains simple and stable: clients still send one model alias such as `model: "nesty-pro-1.0"`.
+
+Internal provider/model role chains are configurable in `config/models.yaml` and are not exposed as raw internal prompts/role debates.
+
+Nesty Pro orchestration env controls:
+
+```bash
+NESTY_PRO_ORCHESTRATION_ENABLED=true
+NESTY_PRO_ORCHESTRATION_MAX_INTERNAL_CALLS=4
+NESTY_PRO_ORCHESTRATION_DEBUG=false
+```
+
+Streaming note:
+
+- For `nesty-pro-1.0` with `stream=true`, multi-model synthesis is skipped and single-model streaming is used.
+
+Quota note:
+
+- Nesty Pro multi-model synthesis can consume multiple internal provider calls for one user request.
+
 ## Docs And Examples
 
 - Full technical documentation: [`docs/README_TECHNICAL.md`](docs/README_TECHNICAL.md)

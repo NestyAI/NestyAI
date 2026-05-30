@@ -42,6 +42,8 @@ ERROR_CODES = {
     "fts_unavailable",
     "fts_rebuild_failed",
     "invalid_search_backend",
+    "model_behavior_config_invalid",
+    "orchestration_failed",
 }
 
 

@@ -1,9 +1,18 @@
 models:
   nesty-flash-1.0:
     display_name: "Nesty Flash 1.0"
-    description: "Fast lightweight model profile"
+    description: "Fastest lightweight profile for short and quick responses"
     strategy: "speed"
-    search_mode: "off"
+    search_mode: "auto"
+    behavior_profile: "flash"
+    response_style: "concise"
+    reasoning_depth: "low"
+    search_aggressiveness: "low"
+    tool_aggressiveness: "low"
+    default_temperature: 0.6
+    default_max_tokens: 1024
+    orchestration_enabled: false
+    orchestration_mode: "single"
     tools_mode: "auto"
     max_tool_calls: 1
     allowed_tools:
@@ -22,6 +31,15 @@ models:
     description: "Balanced multi-provider model profile"
     strategy: "balanced"
     search_mode: "auto"
+    behavior_profile: "balanced"
+    response_style: "balanced"
+    reasoning_depth: "medium"
+    search_aggressiveness: "auto"
+    tool_aggressiveness: "auto"
+    default_temperature: 0.7
+    default_max_tokens: 2048
+    orchestration_enabled: false
+    orchestration_mode: "single"
     tools_mode: "auto"
     max_tool_calls: 3
     allowed_tools:
@@ -42,9 +60,18 @@ models:
 
   nesty-pro-1.0:
     display_name: "Nesty Pro 1.0"
-    description: "High-quality reasoning and research model profile"
+    description: "Highest-quality profile with optional multi-model synthesis for non-streaming"
     strategy: "quality"
     search_mode: "auto"
+    behavior_profile: "pro"
+    response_style: "detailed"
+    reasoning_depth: "high"
+    search_aggressiveness: "high_when_needed"
+    tool_aggressiveness: "high_when_needed"
+    default_temperature: 0.5
+    default_max_tokens: 4096
+    orchestration_enabled: true
+    orchestration_mode: "multi_model_synthesis"
     tools_mode: "auto"
     max_tool_calls: 6
     allowed_tools:
@@ -62,3 +89,24 @@ models:
         model: "deepseek-ai/deepseek-r1"
       - provider: "groq"
         model: "llama-3.3-70b-versatile"
+    orchestration_roles:
+      planner:
+        provider_chain:
+          - provider: "groq"
+            model: "llama-3.1-8b-instant"
+      researcher:
+        provider_chain:
+          - provider: "openrouter"
+            model: "deepseek/deepseek-r1:free"
+          - provider: "groq"
+            model: "llama-3.3-70b-versatile"
+      critic:
+        provider_chain:
+          - provider: "groq"
+            model: "llama-3.3-70b-versatile"
+      finalizer:
+        provider_chain:
+          - provider: "openrouter"
+            model: "deepseek/deepseek-r1:free"
+          - provider: "groq"
+            model: "llama-3.3-70b-versatile"

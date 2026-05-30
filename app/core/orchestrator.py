@@ -7,7 +7,14 @@ from typing import Any
 
 from app.config import ModelsConfig, Settings
 from app.core.errors import APIError
-from app.core.prompt_builder import append_external_context, append_tool_context, ensure_system_message
+from app.core.model_behavior import apply_behavior_defaults, build_behavior_system_instruction
+from app.core.multi_model_orchestrator import NestyProMultiModelOrchestrator
+from app.core.prompt_builder import (
+    append_behavior_instruction,
+    append_external_context,
+    append_tool_context,
+    ensure_system_message,
+)
 from app.core.router import ProviderRouter
 from app.guards.context_guard import ContextGuard
 from app.guards.input_guard import InputGuard
@@ -19,6 +26,7 @@ from app.schemas.chat import (
     ChatMessage,
     ConversationInfo,
     GuardInfo,
+    OrchestrationInfo,
     Usage,
 )
 from app.schemas.tools import SearchResult, SourceItem, ToolExecutionMetadata, ToolMetadata
@@ -45,6 +53,7 @@ class StreamOutcome:
     conversation_summary_mode: str = "auto"
     conversation_summary_used: bool = False
     conversation_summary_updated: bool = False
+    orchestration: OrchestrationInfo = field(default_factory=OrchestrationInfo)
 
 
 @dataclass
@@ -79,6 +88,10 @@ class ChatOrchestrator:
         self.enable_input_guard = enable_input_guard
         self.enable_output_guard = enable_output_guard
         self.logger = logger
+        self.multi_model_orchestrator = NestyProMultiModelOrchestrator(
+            router=self.router,
+            max_internal_calls=self.settings.nesty_pro_orchestration_max_internal_calls,
+        )
 
     async def create_chat_completion(
         self,
@@ -92,6 +105,15 @@ class ChatOrchestrator:
                 status_code=400,
             )
 
+        model_profile_obj = self.models_config.models.get(request.model)
+        if not model_profile_obj:
+            raise APIError(
+                code="invalid_model",
+                message=f"Model '{request.model}' is not supported.",
+                status_code=400,
+            )
+        request = request.model_copy(update=apply_behavior_defaults(request, model_profile_obj.model_dump()))
+
         started_at = time.perf_counter()
         tools_mode = self._normalize_and_validate_request(request)
         messages, input_guard_info, tools_meta, sources = await self._prepare_chat_context(
@@ -101,32 +123,76 @@ class ChatOrchestrator:
         )
 
         try:
-            route_result = await self.router.route_chat(
-                request_id=request_id,
-                model_alias=request.model,
-                messages=messages,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-            )
+            orchestration = self._default_orchestration_info(model_alias=request.model, stream=False)
+            response_text = ""
+            provider_used = ""
+            usage = Usage()
+
+            if self._should_use_multi_model(request=request, model_profile=model_profile_obj.model_dump()):
+                try:
+                    synthesis = await self.multi_model_orchestrator.run(
+                        request_id=request_id,
+                        user_message=self._latest_user_message(messages),
+                        prepared_messages=messages,
+                        model_alias=request.model,
+                        model_profile=model_profile_obj,
+                        temperature=request.temperature,
+                        max_tokens=request.max_tokens,
+                    )
+                    response_text = synthesis.content
+                    provider_used = synthesis.provider
+                    usage = Usage(
+                        prompt_tokens=synthesis.usage.prompt_tokens,
+                        completion_tokens=synthesis.usage.completion_tokens,
+                        total_tokens=synthesis.usage.total_tokens,
+                    )
+                    orchestration = OrchestrationInfo(
+                        enabled=True,
+                        used=True,
+                        mode="multi_model_synthesis",
+                        roles=synthesis.roles,
+                        fallback_used=False,
+                        internal_calls=synthesis.internal_calls,
+                    )
+                except Exception:
+                    orchestration = OrchestrationInfo(
+                        enabled=True,
+                        used=False,
+                        mode="multi_model_synthesis",
+                        roles=[],
+                        fallback_used=True,
+                        internal_calls=0,
+                        reason="fallback_to_single_model",
+                    )
+
+            if not response_text:
+                route_result = await self.router.route_chat(
+                    request_id=request_id,
+                    model_alias=request.model,
+                    messages=messages,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                )
+                response_text = route_result.provider_result.content
+                provider_used = route_result.provider_used
+                usage = Usage(
+                    prompt_tokens=route_result.provider_result.usage.prompt_tokens,
+                    completion_tokens=route_result.provider_result.usage.completion_tokens,
+                    total_tokens=route_result.provider_result.usage.total_tokens,
+                )
 
             output_guard_info = GuardInfo()
-            response_text = route_result.provider_result.content
             if self.enable_output_guard:
                 response_text, output_guard_info = self.output_guard.scan_text(response_text)
 
             combined_guard = self._combine_guard_info(input_guard_info, output_guard_info)
-            usage = Usage(
-                prompt_tokens=route_result.provider_result.usage.prompt_tokens,
-                completion_tokens=route_result.provider_result.usage.completion_tokens,
-                total_tokens=route_result.provider_result.usage.total_tokens,
-            )
             latency_ms = int((time.perf_counter() - started_at) * 1000)
             log_safe(
                 self.logger,
                 "chat_completed",
                 request_id=request_id,
                 model_alias=request.model,
-                provider_used=route_result.provider_used,
+                provider_used=provider_used,
                 latency_ms=latency_ms,
                 redaction_count=combined_guard.redaction_count,
                 error_code="",
@@ -136,7 +202,7 @@ class ChatOrchestrator:
                 id=generate_chat_completion_id(),
                 created=int(time.time()),
                 model=request.model,
-                provider=route_result.provider_used,
+                provider=provider_used,
                 choices=[
                     ChatChoice(
                         index=0,
@@ -148,6 +214,7 @@ class ChatOrchestrator:
                 guard=combined_guard,
                 tools=tools_meta,
                 sources=self._dedupe_sources(sources),
+                orchestration=orchestration,
             )
         except APIError as exc:
             log_safe(
@@ -165,6 +232,14 @@ class ChatOrchestrator:
         request_id: str,
         request: ChatCompletionRequest,
     ) -> StreamHandle:
+        model_profile_obj = self.models_config.models.get(request.model)
+        if not model_profile_obj:
+            raise APIError(
+                code="invalid_model",
+                message=f"Model '{request.model}' is not supported.",
+                status_code=400,
+            )
+        request = request.model_copy(update=apply_behavior_defaults(request, model_profile_obj.model_dump()))
         tools_mode = self._normalize_and_validate_request(request)
         messages, input_guard_info, tools_meta, sources = await self._prepare_chat_context(
             request_id=request_id,
@@ -191,6 +266,7 @@ class ChatOrchestrator:
             conversation_summary_mode=request.conversation_summary_mode if request.store else "auto",
             conversation_summary_used=request.conversation_summary_used if request.store else False,
             conversation_summary_updated=request.conversation_summary_updated if request.store else False,
+            orchestration=self._default_orchestration_info(model_alias=request.model, stream=True),
         )
 
         async def stream_events() -> AsyncIterator[str]:
@@ -314,6 +390,7 @@ class ChatOrchestrator:
                     "tools": outcome.tools.model_dump(),
                     "sources": [item.model_dump() for item in outcome.sources],
                     "usage": outcome.usage.model_dump(),
+                    "orchestration": outcome.orchestration.model_dump(),
                     "conversation": (
                         ConversationInfo(
                             id=outcome.conversation_id,
@@ -354,7 +431,10 @@ class ChatOrchestrator:
                 status_code=400,
             )
 
+        model_profile_dict = model_profile.model_dump()
+        behavior_instruction = build_behavior_system_instruction(request.model, model_profile_dict)
         messages: list[ChatMessage] = ensure_system_message(request.messages)
+        messages = append_behavior_instruction(messages, behavior_instruction)
         input_guard_info = GuardInfo()
         tools_meta = ToolMetadata()
         sources: list[SourceItem] = []
@@ -367,7 +447,7 @@ class ChatOrchestrator:
             messages=messages,
             request=request,
             latest_user_message=latest_user_message,
-            model_profile=model_profile.model_dump(),
+            model_profile=model_profile_dict,
             tools_meta=tools_meta,
             request_id=request_id,
         )
@@ -376,7 +456,7 @@ class ChatOrchestrator:
 
         planned_tools = self._plan_tools(
             message=latest_user_message,
-            model_profile=model_profile.model_dump(),
+            model_profile=model_profile_dict,
             tools_mode=tools_mode,
         )
         tool_context_text, tool_sources, tool_used, executions = await self._execute_planned_tools(
@@ -636,6 +716,42 @@ class ChatOrchestrator:
             output_redacted=output_guard_info.output_redacted,
             redaction_count=input_guard_info.redaction_count + output_guard_info.redaction_count,
             categories=combined_categories,
+        )
+
+    def _should_use_multi_model(self, request: ChatCompletionRequest, model_profile: dict[str, Any]) -> bool:
+        if request.stream:
+            return False
+        if request.model != "nesty-pro-1.0":
+            return False
+        if not self.settings.nesty_pro_orchestration_enabled:
+            return False
+        if not bool(model_profile.get("orchestration_enabled", False)):
+            return False
+        return str(model_profile.get("orchestration_mode", "single")).strip().lower() == "multi_model_synthesis"
+
+    def _default_orchestration_info(self, model_alias: str, stream: bool) -> OrchestrationInfo:
+        profile = self.models_config.models.get(model_alias)
+        profile_dict = profile.model_dump() if profile else {}
+        profile_enabled = bool(profile_dict.get("orchestration_enabled", False))
+        enabled = bool(self.settings.nesty_pro_orchestration_enabled and profile_enabled and model_alias == "nesty-pro-1.0")
+        if stream and enabled:
+            return OrchestrationInfo(
+                enabled=True,
+                used=False,
+                mode="single_stream",
+                roles=[],
+                fallback_used=False,
+                internal_calls=0,
+                reason="streaming_not_supported_for_multi_model",
+            )
+        return OrchestrationInfo(
+            enabled=enabled,
+            used=False,
+            mode="single",
+            roles=[],
+            fallback_used=False,
+            internal_calls=0,
+            reason=None,
         )
 
     @staticmethod

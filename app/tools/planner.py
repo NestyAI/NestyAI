@@ -77,6 +77,29 @@ def _detect_tools_auto(message: str) -> list[str]:
     return detected
 
 
+def _detect_tools_low(message: str) -> list[str]:
+    normalized = f" {re.sub(r'\\s+', ' ', message.lower()).strip()} "
+    detected: list[str] = []
+
+    if any(keyword in normalized for keyword in ["calculate", "compute", "tính", "+", "-", "*", "/", " chia ", " nhân "]):
+        detected.append("calculator")
+    if any(keyword in normalized for keyword in ["weather", "thời tiết", "forecast", "dự báo", "temperature", "nhiệt độ"]):
+        detected.append("weather_lookup")
+    if any(keyword in normalized for keyword in ["exchange rate", "tỷ giá", "currency", "đổi tiền", " usd ", " eur ", " vnd "]):
+        detected.append("exchange_rate")
+    if any(keyword in normalized for keyword in ["latest version", " version ", "release", "changelog", "npm", "pypi", "pip", "package", "phiên bản"]):
+        detected.append("package_version_lookup")
+    return detected
+
+
+def _detect_tools_high_when_needed(message: str) -> list[str]:
+    normalized = f" {re.sub(r'\\s+', ' ', message.lower()).strip()} "
+    detected = _detect_tools_auto(message)
+    if any(keyword in normalized for keyword in ["compare", "comparison", "define", "what is", "who is", "là gì", "khái niệm"]):
+        detected.append("wikipedia_lookup")
+    return detected
+
+
 def _dedupe_preserve(items: list[str]) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
@@ -104,7 +127,13 @@ def plan_tools(
         if mode == "off":
             return []
         if mode == "auto" or mode == "":
-            planned = _detect_tools_auto(message)
+            aggressiveness = str(model_config.get("tool_aggressiveness", "auto")).strip().lower()
+            if aggressiveness == "low":
+                planned = _detect_tools_low(message)
+            elif aggressiveness == "high_when_needed":
+                planned = _detect_tools_high_when_needed(message)
+            else:
+                planned = _detect_tools_auto(message)
             planned = [name for name in planned if name in allowed_tools]
             return _dedupe_preserve(planned)[:max_tool_calls]
         return []
@@ -114,7 +143,12 @@ def plan_tools(
         planned = [name for name in planned if name in allowed_tools]
         return _dedupe_preserve(planned)[:max_tool_calls]
 
-    planned = _detect_tools_auto(message)
+    aggressiveness = str(model_config.get("tool_aggressiveness", "auto")).strip().lower()
+    if aggressiveness == "low":
+        planned = _detect_tools_low(message)
+    elif aggressiveness == "high_when_needed":
+        planned = _detect_tools_high_when_needed(message)
+    else:
+        planned = _detect_tools_auto(message)
     planned = [name for name in planned if name in allowed_tools]
     return _dedupe_preserve(planned)[:max_tool_calls]
-

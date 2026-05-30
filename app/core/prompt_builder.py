@@ -24,6 +24,18 @@ def ensure_system_message(messages: list[ChatMessage]) -> list[ChatMessage]:
     return [ChatMessage(role="system", content=DEFAULT_SYSTEM_MESSAGE), *messages]
 
 
+def append_behavior_instruction(messages: list[ChatMessage], behavior_instruction: str) -> list[ChatMessage]:
+    instruction = behavior_instruction.strip()
+    if not instruction:
+        return messages
+    behavior_message = ChatMessage(role="system", content=instruction)
+    system_indices = [index for index, message in enumerate(messages) if message.role == "system"]
+    if not system_indices:
+        return [behavior_message, *messages]
+    insert_at = system_indices[0] + 1
+    return [*messages[:insert_at], behavior_message, *messages[insert_at:]]
+
+
 def append_external_context(
     messages: list[ChatMessage],
     context_text: str,

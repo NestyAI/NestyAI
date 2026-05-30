@@ -50,14 +50,31 @@ class ProviderRouter:
                 message=f"Model '{model_alias}' is not supported.",
                 status_code=400,
             )
+        return await self.generate_with_provider_chain(
+            request_id=request_id,
+            provider_chain=profile.provider_chain,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            trace_label=model_alias,
+        )
 
+    async def generate_with_provider_chain(
+        self,
+        request_id: str,
+        provider_chain,
+        messages: list[ChatMessage],
+        temperature: float,
+        max_tokens: int,
+        trace_label: str = "custom_chain",
+    ) -> RouteResult:
+        targets = self._normalize_provider_chain(provider_chain)
         attempted_providers: list[str] = []
         last_error_code = "provider_unavailable"
         had_missing_api_key = False
         had_non_missing_failure = False
 
-        for target in profile.provider_chain:
-            provider_name = target.provider
+        for provider_name, provider_model in targets:
             attempted_providers.append(provider_name)
             provider = self.providers.get(provider_name)
 
@@ -66,7 +83,7 @@ class ProviderRouter:
                     self.logger,
                     "provider_missing",
                     request_id=request_id,
-                    model_alias=model_alias,
+                    model_alias=trace_label,
                     provider=provider_name,
                     error_code="provider_unavailable",
                 )
@@ -75,7 +92,7 @@ class ProviderRouter:
             try:
                 provider_result = await provider.generate_chat_completion(
                     messages=messages,
-                    model=target.model,
+                    model=provider_model,
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
@@ -87,7 +104,7 @@ class ProviderRouter:
                     self.logger,
                     "provider_failed",
                     request_id=request_id,
-                    model_alias=model_alias,
+                    model_alias=trace_label,
                     provider=provider_name,
                     error_code="missing_api_key",
                 )
@@ -99,7 +116,7 @@ class ProviderRouter:
                     self.logger,
                     "provider_failed",
                     request_id=request_id,
-                    model_alias=model_alias,
+                    model_alias=trace_label,
                     provider=provider_name,
                     error_code="provider_unavailable",
                 )
@@ -114,7 +131,7 @@ class ProviderRouter:
         if not attempted_providers:
             raise APIError(
                 code="provider_unavailable",
-                message="No provider chain configured for this model.",
+                message="No provider chain configured for this request.",
                 status_code=502,
             )
 
@@ -127,9 +144,9 @@ class ProviderRouter:
             )
 
         raise APIError(
-            code="all_providers_failed",
-            message="All configured providers failed for this request.",
-            status_code=503,
+                code="all_providers_failed",
+                message="All configured providers failed for this request.",
+                status_code=503,
             details={
                 "attempted_providers": attempted_providers,
                 "last_error_code": last_error_code,
@@ -282,3 +299,20 @@ class ProviderRouter:
         yield first_chunk
         async for chunk in stream:
             yield chunk
+
+    @staticmethod
+    def _normalize_provider_chain(provider_chain) -> list[tuple[str, str]]:
+        normalized: list[tuple[str, str]] = []
+        for target in provider_chain or []:
+            provider_name = ""
+            model_name = ""
+            if hasattr(target, "provider") and hasattr(target, "model"):
+                provider_name = str(getattr(target, "provider") or "").strip()
+                model_name = str(getattr(target, "model") or "").strip()
+            elif isinstance(target, dict):
+                provider_name = str(target.get("provider") or "").strip()
+                model_name = str(target.get("model") or "").strip()
+            if not provider_name or not model_name:
+                continue
+            normalized.append((provider_name, model_name))
+        return normalized

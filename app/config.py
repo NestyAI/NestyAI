@@ -60,6 +60,9 @@ class Settings(BaseModel):
     conversation_summary_keep_recent_messages: int = 12
     conversation_summary_max_chars: int = 4000
     conversation_summary_model: str = "nesty-flash-1.0"
+    nesty_pro_orchestration_enabled: bool = True
+    nesty_pro_orchestration_max_internal_calls: int = 4
+    nesty_pro_orchestration_debug: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -103,6 +106,11 @@ class Settings(BaseModel):
             ),
             conversation_summary_max_chars=int(os.getenv("CONVERSATION_SUMMARY_MAX_CHARS", "4000")),
             conversation_summary_model=os.getenv("CONVERSATION_SUMMARY_MODEL", "nesty-flash-1.0"),
+            nesty_pro_orchestration_enabled=_to_bool(os.getenv("NESTY_PRO_ORCHESTRATION_ENABLED"), True),
+            nesty_pro_orchestration_max_internal_calls=int(
+                os.getenv("NESTY_PRO_ORCHESTRATION_MAX_INTERNAL_CALLS", "4")
+            ),
+            nesty_pro_orchestration_debug=_to_bool(os.getenv("NESTY_PRO_ORCHESTRATION_DEBUG"), False),
         )
 
 
@@ -111,17 +119,31 @@ class ProviderTarget(BaseModel):
     model: str
 
 
+class OrchestrationRoleConfig(BaseModel):
+    provider_chain: list[ProviderTarget] = Field(default_factory=list)
+
+
 class ModelProfile(BaseModel):
     display_name: str
     description: str
     strategy: str
     search_mode: str
+    behavior_profile: str = "balanced"
+    response_style: str = "balanced"
+    reasoning_depth: str = "medium"
+    search_aggressiveness: str = "auto"
+    tool_aggressiveness: str = "auto"
+    default_temperature: float = 0.7
+    default_max_tokens: int = 1024
+    orchestration_enabled: bool = False
+    orchestration_mode: str = "single"
     max_tool_calls: int = 0
     tools_mode: str = "auto"
     allowed_tools: list[str] = Field(default_factory=list)
     max_search_results: int = 0
     max_context_chars: int = 2000
     provider_chain: list[ProviderTarget] = Field(default_factory=list)
+    orchestration_roles: dict[str, OrchestrationRoleConfig] = Field(default_factory=dict)
 
 
 class ModelsConfig(BaseModel):

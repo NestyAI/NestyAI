@@ -55,6 +55,33 @@ _NO_SEARCH_TERMS = [
     "how are you",
 ]
 
+_HIGH_AGGRESSIVENESS_TERMS = [
+    "compare",
+    "comparison",
+    "benchmark",
+    "verify",
+    "fact check",
+    "documentation",
+    "docs",
+    "api reference",
+    "breaking changes",
+    "security advisory",
+    "cve",
+    "release notes",
+    "best model",
+]
+
+
+def _has_search_signal(normalized: str, terms: list[str]) -> bool:
+    for phrase in terms:
+        if phrase in normalized:
+            return True
+    return False
+
+
+def _is_direct_current_question(normalized: str) -> bool:
+    return bool(re.search(r"\b(what|who|when|where).*(current|today|latest|now)\b", normalized))
+
 
 def should_use_search(
     message: str,
@@ -81,12 +108,31 @@ def should_use_search(
         if phrase in normalized:
             return False
 
-    for phrase in _SEARCH_TERMS:
-        if phrase in normalized:
-            return True
+    aggressiveness = str(model_config.get("search_aggressiveness", "auto")).strip().lower()
+    has_base_signal = _has_search_signal(normalized, _SEARCH_TERMS)
+    has_current_question = _is_direct_current_question(normalized)
+    if aggressiveness == "low":
+        strong_terms = [
+            "latest",
+            "today",
+            "current",
+            "price",
+            "weather",
+            "news",
+            "version",
+            "update",
+            "exchange rate",
+            "mới nhất",
+            "hôm nay",
+            "hiện tại",
+            "giá",
+            "thời tiết",
+            "tin tức",
+            "phiên bản",
+            "tỷ giá",
+        ]
+        return _has_search_signal(normalized, strong_terms) or has_current_question
+    if aggressiveness == "high_when_needed":
+        return has_base_signal or has_current_question or _has_search_signal(normalized, _HIGH_AGGRESSIVENESS_TERMS)
 
-    # Direct "current status" style questions likely need search.
-    if re.search(r"\b(what|who|when|where).*(current|today|latest|now)\b", normalized):
-        return True
-
-    return False
+    return has_base_signal or has_current_question

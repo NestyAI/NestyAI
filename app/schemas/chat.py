@@ -60,6 +60,16 @@ class ConversationInfo(BaseModel):
     summary_updated: bool = False
 
 
+class OrchestrationInfo(BaseModel):
+    enabled: bool = False
+    used: bool = False
+    mode: str = "single"
+    roles: list[str] = Field(default_factory=list)
+    fallback_used: bool = False
+    internal_calls: int = 0
+    reason: str | None = None
+
+
 class ChatCompletionResponse(BaseModel):
     id: str
     object: str = "chat.completion"
@@ -71,5 +81,6 @@ class ChatCompletionResponse(BaseModel):
     guard: GuardInfo
     tools: ToolMetadata = Field(default_factory=ToolMetadata)
     sources: list[SourceItem] = Field(default_factory=list)
+    orchestration: OrchestrationInfo | None = None
     auth: AuthDebugInfo | None = None
     conversation: ConversationInfo | None = None
