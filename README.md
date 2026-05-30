@@ -252,6 +252,36 @@ Nesty Pro force:
 }
 ```
 
+## Phase 7.0c: Runtime Model Config API (Internal Foundation)
+
+NestyAI now supports runtime model config overrides with a minimal internal API:
+
+- YAML remains default (`config/models.yaml`)
+- SQLite stores optional runtime overrides
+- Effective model config = `default + active override`
+
+Internal endpoints (server-to-server only):
+
+- `GET /internal/model-configs`
+- `GET /internal/model-configs/{model_id}`
+- `PATCH /internal/model-configs/{model_id}`
+- `POST /internal/model-configs/{model_id}/reset`
+- `POST /internal/model-configs/{model_id}/test`
+- `GET /internal/model-configs/audit`
+
+Security model:
+
+- Protected by `NESTY_INTERNAL_ADMIN_TOKEN`
+- Feature gate: `INTERNAL_ADMIN_ENABLED=false` by default
+- Intended for future Nesty Console NextJS server routes (backend-to-backend only)
+- Never expose `NESTY_INTERNAL_ADMIN_TOKEN` to browser/client code
+
+Runtime config notes:
+
+- Provider API keys are still environment variables only
+- Do not store API keys/secrets in model config overrides
+- Reset endpoint restores effective config back to YAML defaults
+
 ## Docs And Examples
 
 - Full technical documentation: [`docs/README_TECHNICAL.md`](docs/README_TECHNICAL.md)

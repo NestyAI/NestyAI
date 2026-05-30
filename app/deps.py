@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from app.config import ModelsConfig, Settings, load_guard_rules, load_models_config
+from app.core.model_config_loader import list_effective_model_configs
 from app.core.orchestrator import ChatOrchestrator
 from app.core.router import ProviderRouter
 from app.guards.context_guard import ContextGuard
@@ -21,9 +22,13 @@ def get_settings() -> Settings:
     return Settings.from_env()
 
 
-@lru_cache(maxsize=1)
 def get_models_config() -> ModelsConfig:
-    return load_models_config()
+    try:
+        rows = list_effective_model_configs()
+        raw_models = {str(item["model_id"]): dict(item["effective_config"]) for item in rows}
+        return ModelsConfig.model_validate({"models": raw_models})
+    except Exception:
+        return load_models_config()
 
 
 @lru_cache(maxsize=1)

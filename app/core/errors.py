@@ -46,6 +46,12 @@ ERROR_CODES = {
     "orchestration_failed",
     "invalid_orchestration_mode",
     "orchestration_not_available",
+    "internal_admin_disabled",
+    "internal_admin_unauthorized",
+    "model_config_not_found",
+    "model_config_invalid",
+    "model_config_update_failed",
+    "model_config_test_failed",
 }
 
 

@@ -98,6 +98,42 @@ def init_db(db_path: str) -> None:
             "CREATE INDEX IF NOT EXISTS idx_conversations_api_key_updated "
             "ON conversations(api_key_id, updated_at)"
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS model_config_overrides (
+                id TEXT PRIMARY KEY,
+                model_id TEXT NOT NULL UNIQUE,
+                config_json TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                updated_by_api_key_id TEXT DEFAULT NULL,
+                updated_by_label TEXT DEFAULT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS model_config_audit_logs (
+                id TEXT PRIMARY KEY,
+                model_id TEXT NOT NULL,
+                old_config_json TEXT DEFAULT NULL,
+                new_config_json TEXT DEFAULT NULL,
+                action TEXT NOT NULL,
+                changed_by_api_key_id TEXT DEFAULT NULL,
+                changed_by_label TEXT DEFAULT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_model_config_overrides_model_id_active "
+            "ON model_config_overrides(model_id, is_active)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_model_config_audit_model_id_created "
+            "ON model_config_audit_logs(model_id, created_at)"
+        )
         _ensure_usage_logs_has_conversation_id(conn)
         _ensure_conversations_summary_columns(conn)
         conn.commit()

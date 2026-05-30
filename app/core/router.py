@@ -4,7 +4,8 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
-from app.config import ModelsConfig
+from app.config import ModelProfile, ModelsConfig
+from app.core.model_config_loader import get_effective_model_config
 from app.core.errors import APIError, MissingAPIKeyError, ProviderError, StreamingNotSupportedError
 from app.providers.base import BaseProvider
 from app.schemas.chat import ChatMessage
@@ -43,7 +44,7 @@ class ProviderRouter:
         temperature: float,
         max_tokens: int,
     ) -> RouteResult:
-        profile = self.models_config.models.get(model_alias)
+        profile = self._resolve_model_profile(model_alias)
         if not profile:
             raise APIError(
                 code="invalid_model",
@@ -161,7 +162,7 @@ class ProviderRouter:
         temperature: float,
         max_tokens: int,
     ) -> StreamRouteResult:
-        profile = self.models_config.models.get(model_alias)
+        profile = self._resolve_model_profile(model_alias)
         if not profile:
             raise APIError(
                 code="invalid_model",
@@ -175,8 +176,7 @@ class ProviderRouter:
         had_non_missing_failure = False
         had_streaming_not_supported = False
 
-        for target in profile.provider_chain:
-            provider_name = target.provider
+        for provider_name, provider_model in self._normalize_provider_chain(profile.provider_chain):
             attempted_providers.append(provider_name)
             provider = self.providers.get(provider_name)
 
@@ -194,7 +194,7 @@ class ProviderRouter:
             try:
                 provider_stream = provider.stream_chat_completion(
                     messages=messages,
-                    model=target.model,
+                    model=provider_model,
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
@@ -316,3 +316,12 @@ class ProviderRouter:
                 continue
             normalized.append((provider_name, model_name))
         return normalized
+
+    def _resolve_model_profile(self, model_alias: str) -> ModelProfile | None:
+        try:
+            effective = get_effective_model_config(model_alias)
+            if isinstance(effective, dict):
+                return ModelProfile.model_validate(effective)
+        except Exception:
+            pass
+        return self.models_config.models.get(model_alias)

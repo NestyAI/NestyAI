@@ -8,9 +8,9 @@ class ModelCard(BaseModel):
     object: str = "model"
     owned_by: str = "nestyai"
     description: str
+    config_source: str | None = None
 
 
 class ModelListResponse(BaseModel):
     object: str = "list"
     data: list[ModelCard] = Field(default_factory=list)
-

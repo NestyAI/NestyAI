@@ -68,6 +68,8 @@ class Settings(BaseModel):
     nesty_pro_orchestration_max_context_chars: int = 12000
     nesty_pro_orchestration_role_timeout_seconds: float = 30.0
     nesty_pro_orchestration_include_role_latency: bool = True
+    internal_admin_enabled: bool = False
+    nesty_internal_admin_token: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -131,6 +133,8 @@ class Settings(BaseModel):
             nesty_pro_orchestration_include_role_latency=_to_bool(
                 os.getenv("NESTY_PRO_ORCHESTRATION_INCLUDE_ROLE_LATENCY"), True
             ),
+            internal_admin_enabled=_to_bool(os.getenv("INTERNAL_ADMIN_ENABLED"), False),
+            nesty_internal_admin_token=os.getenv("NESTY_INTERNAL_ADMIN_TOKEN"),
         )
 
 

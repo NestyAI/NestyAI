@@ -11,6 +11,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.api.chat import router as chat_router
 from app.api.conversations import router as conversations_router
 from app.api.health import router as health_router
+from app.api.internal_model_configs import router as internal_model_configs_router
 from app.api.models import router as models_router
 from app.config import Settings
 from app.core.errors import APIError, build_error_response
@@ -94,6 +95,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(models_router)
     app.include_router(chat_router)
     app.include_router(conversations_router)
+    app.include_router(internal_model_configs_router)
 
     @app.exception_handler(APIError)
     async def api_error_handler(_: Request, exc: APIError) -> JSONResponse:

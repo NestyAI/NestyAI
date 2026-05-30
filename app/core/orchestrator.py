@@ -5,8 +5,9 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.config import ModelsConfig, Settings
+from app.config import ModelProfile, ModelsConfig, Settings
 from app.core.errors import APIError
+from app.core.model_config_loader import get_effective_model_config
 from app.core.model_behavior import apply_behavior_defaults, build_behavior_system_instruction
 from app.core.multi_model_orchestrator import NestyProMultiModelOrchestrator, should_use_orchestration
 from app.core.prompt_builder import (
@@ -104,7 +105,7 @@ class ChatOrchestrator:
                 status_code=400,
             )
 
-        model_profile_obj = self.models_config.models.get(request.model)
+        model_profile_obj = self._resolve_model_profile(request.model)
         if not model_profile_obj:
             raise APIError(
                 code="invalid_model",
@@ -258,7 +259,7 @@ class ChatOrchestrator:
         request_id: str,
         request: ChatCompletionRequest,
     ) -> StreamHandle:
-        model_profile_obj = self.models_config.models.get(request.model)
+        model_profile_obj = self._resolve_model_profile(request.model)
         if not model_profile_obj:
             raise APIError(
                 code="invalid_model",
@@ -469,7 +470,7 @@ class ChatOrchestrator:
         request: ChatCompletionRequest,
         tools_mode: str | list[str],
     ) -> tuple[list[ChatMessage], GuardInfo, ToolMetadata, list[SourceItem]]:
-        model_profile = self.models_config.models.get(request.model)
+        model_profile = self._resolve_model_profile(request.model)
         if not model_profile:
             raise APIError(
                 code="invalid_model",
@@ -787,6 +788,15 @@ class ChatOrchestrator:
             "has_conversation_context": bool(request.store and request.conversation_id),
             "conversation_summary_text": summary_text,
         }
+
+    def _resolve_model_profile(self, model_alias: str) -> ModelProfile | None:
+        try:
+            effective = get_effective_model_config(model_alias)
+            if isinstance(effective, dict):
+                return ModelProfile.model_validate(effective)
+        except Exception:
+            pass
+        return self.models_config.models.get(model_alias)
 
     @staticmethod
     def _orchestration_info_from_decision(decision: dict[str, Any]) -> OrchestrationInfo:
