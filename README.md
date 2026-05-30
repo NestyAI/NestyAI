@@ -10,7 +10,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python" />
   <img src="https://img.shields.io/badge/FastAPI-Production%20Ready-009688" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/tests-390%2B%20passed-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-392%20passed-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/API-OpenAI%20Compatible-orange" alt="OpenAI Compatible" />
   <img src="https://img.shields.io/badge/streaming-SSE-ff9800" alt="SSE" />
   <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version" />
@@ -497,7 +497,7 @@ curl "http://127.0.0.1:8000/v1/conversations/memory-controls?pinned=true&limit=2
 
 ## Quality Status
 
-- test suite: **322 passed**
+- test suite: **392 passed**
 - streaming SSE contract: enabled
 - FTS fallback behavior: enabled
 - semantic recall: optional, disabled by default
