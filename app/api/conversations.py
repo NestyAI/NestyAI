@@ -15,8 +15,10 @@ from app.storage.conversations import (
     get_conversation,
     get_conversation_stats,
     get_recent_messages,
+    list_memory_controlled_messages,
     list_conversations,
     list_messages,
+    update_message_memory_controls,
     reset_conversation_summary,
     search_conversations,
     search_messages,
@@ -33,6 +35,12 @@ class UpdateConversationTitleRequest(BaseModel):
 
 class ClearConversationRequest(BaseModel):
     keep_summary: bool = False
+
+
+class UpdateMessageMemoryRequest(BaseModel):
+    pinned: bool | None = None
+    excluded: bool | None = None
+    tags: list[str] | None = None
 
 
 def _resolve_auth_context(settings, request: Request) -> AuthContext | None:
@@ -89,6 +97,14 @@ def _validate_query(query: str) -> str:
             status_code=400,
         )
     return cleaned
+
+
+def _validate_memory_filters(pinned: bool | None, excluded: bool | None) -> tuple[bool | None, bool | None]:
+    if pinned is not None:
+        pinned = bool(pinned)
+    if excluded is not None:
+        excluded = bool(excluded)
+    return pinned, excluded
 
 
 @router.get("")
@@ -153,6 +169,46 @@ async def get_conversations(
             }
         )
     return {"object": "list", "data": with_counts}
+
+
+@router.get("/memory-controls")
+async def get_memory_controls(
+    request: Request,
+    pinned: bool | None = None,
+    excluded: bool | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    settings = get_settings()
+    auth_context = _resolve_auth_context(settings, request)
+    api_key_id = auth_context.api_key_id if auth_context else None
+    limit, offset = _validate_limit_offset(limit, offset)
+    pinned, excluded = _validate_memory_filters(pinned, excluded)
+
+    rows = list_memory_controlled_messages(
+        api_key_id=api_key_id,
+        pinned=pinned,
+        excluded=excluded,
+        limit=limit + 1,
+        offset=offset,
+        db_path=settings.nesty_db_path,
+    )
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    return {
+        "object": "list",
+        "data": rows,
+        "filters": {
+            "pinned": pinned,
+            "excluded": excluded,
+        },
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "count": len(rows),
+            "has_more": has_more,
+        },
+    }
 
 
 @router.get("/search")
@@ -250,6 +306,67 @@ async def search_conversations_endpoint(
             "offset": offset,
             "count": len(conversations_data) + len(messages_data),
             "has_more": has_more,
+        },
+    }
+
+
+@router.patch("/{conversation_id}/messages/{message_id}/memory")
+async def patch_message_memory_controls(
+    request: Request,
+    conversation_id: str,
+    message_id: str,
+    body: UpdateMessageMemoryRequest,
+) -> dict:
+    settings = get_settings()
+    auth_context = _resolve_auth_context(settings, request)
+    conversation = get_conversation(conversation_id, db_path=settings.nesty_db_path)
+    if not _conversation_accessible(settings, conversation, auth_context):
+        raise APIError(
+            code="conversation_not_found",
+            message="Conversation not found.",
+            status_code=404,
+        )
+
+    if body.pinned is True and body.excluded is True:
+        raise APIError(
+            code="invalid_memory_control_request",
+            message="Message memory cannot be pinned and excluded at the same time.",
+            status_code=400,
+        )
+
+    api_key_id = auth_context.api_key_id if auth_context else None
+    try:
+        updated = update_message_memory_controls(
+            message_id=message_id,
+            conversation_id=conversation_id,
+            api_key_id=api_key_id,
+            pinned=body.pinned,
+            excluded=body.excluded,
+            tags=body.tags,
+            db_path=settings.nesty_db_path,
+        )
+    except Exception as exc:
+        raise APIError(
+            code="memory_control_update_failed",
+            message="Failed to update message memory controls.",
+            status_code=500,
+        ) from exc
+
+    if updated is None:
+        raise APIError(
+            code="conversation_not_found",
+            message="Conversation not found.",
+            status_code=404,
+        )
+
+    return {
+        "ok": True,
+        "message": {
+            "id": updated["id"],
+            "memory_pinned": bool(updated.get("memory_pinned")),
+            "memory_excluded": bool(updated.get("memory_excluded")),
+            "memory_tags": list(updated.get("memory_tags") or []),
+            "memory_updated_at": updated.get("memory_updated_at"),
         },
     }
 

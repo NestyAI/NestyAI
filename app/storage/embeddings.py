@@ -37,6 +37,25 @@ def _safe_parse_json_object(raw: str | None) -> dict[str, Any] | None:
     return parsed
 
 
+def _safe_parse_json_str_list(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    values: list[str] = []
+    for item in parsed:
+        if not isinstance(item, str):
+            continue
+        cleaned = item.strip()
+        if cleaned:
+            values.append(cleaned)
+    return values
+
+
 def _safe_parse_embedding(raw: str | None) -> list[float] | None:
     if not raw:
         return None
@@ -306,6 +325,7 @@ def search_similar_embeddings(
     include_roles: list[str] | None = None,
     exclude_owner_ids: list[str] | None = None,
     candidate_limit: int = 500,
+    exclude_memory_excluded: bool = False,
     db_path: str | None = None,
 ) -> list[dict[str, Any]]:
     query_dim = len(query_embedding)
@@ -333,6 +353,10 @@ def search_similar_embeddings(
             m.conversation_id,
             m.role,
             m.content,
+            m.memory_pinned,
+            m.memory_excluded,
+            m.memory_tags,
+            m.memory_updated_at,
             m.created_at
         FROM embedding_records e
         JOIN conversation_messages m ON m.id = e.owner_id
@@ -367,6 +391,8 @@ def search_similar_embeddings(
         placeholders = ",".join("?" for _ in exclude_ids)
         sql += f" AND e.owner_id NOT IN ({placeholders})"
         params.extend(exclude_ids)
+    if exclude_memory_excluded:
+        sql += " AND m.memory_excluded = 0"
 
     sql += " ORDER BY e.updated_at DESC LIMIT ?"
     params.append(candidate_limit)
@@ -399,6 +425,10 @@ def search_similar_embeddings(
                 "conversation_id": row["conversation_id"],
                 "role": row["role"],
                 "content": row["content"],
+                "memory_pinned": bool(int(row["memory_pinned"] or 0)),
+                "memory_excluded": bool(int(row["memory_excluded"] or 0)),
+                "memory_tags": _safe_parse_json_str_list(row["memory_tags"]),
+                "memory_updated_at": row["memory_updated_at"],
                 "created_at": row["created_at"],
             }
         )

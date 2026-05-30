@@ -86,6 +86,10 @@ class Settings(BaseModel):
     semantic_recall_include_roles: list[str] = Field(default_factory=lambda: ["user", "assistant"])
     semantic_recall_exclude_current_conversation_recent: bool = True
     semantic_recall_candidate_limit: int = 500
+    semantic_recall_pinned_boost: float = 0.08
+    semantic_recall_dedup_similarity: float = 0.96
+    semantic_recall_max_per_conversation: int = 3
+    semantic_recall_exclude_memory_excluded: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -177,6 +181,12 @@ class Settings(BaseModel):
                 os.getenv("SEMANTIC_RECALL_EXCLUDE_CURRENT_CONVERSATION_RECENT"), True
             ),
             semantic_recall_candidate_limit=int(os.getenv("SEMANTIC_RECALL_CANDIDATE_LIMIT", "500")),
+            semantic_recall_pinned_boost=float(os.getenv("SEMANTIC_RECALL_PINNED_BOOST", "0.08")),
+            semantic_recall_dedup_similarity=float(os.getenv("SEMANTIC_RECALL_DEDUP_SIMILARITY", "0.96")),
+            semantic_recall_max_per_conversation=int(os.getenv("SEMANTIC_RECALL_MAX_PER_CONVERSATION", "3")),
+            semantic_recall_exclude_memory_excluded=_to_bool(
+                os.getenv("SEMANTIC_RECALL_EXCLUDE_MEMORY_EXCLUDED"), True
+            ),
         )
 
 

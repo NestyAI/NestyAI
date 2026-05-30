@@ -59,6 +59,9 @@ ERROR_CODES = {
     "invalid_semantic_recall_mode",
     "semantic_recall_failed",
     "semantic_recall_unavailable",
+    "invalid_memory_control_request",
+    "memory_control_update_failed",
+    "memory_eval_failed",
 }
 
 

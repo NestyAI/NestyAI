@@ -28,7 +28,7 @@ NestyAI is a personal AI gateway focused on:
 - optional embeddings + semantic recall foundation
 - deterministic local-first architecture (SQLite)
 
-Current status: **Phase 7.2 completed**.
+Current status: **Phase 7.3 completed**.
 
 ---
 
@@ -49,6 +49,7 @@ Current status: **Phase 7.2 completed**.
 - runtime model config overrides via internal API
 - embedding provider abstraction + optional message embedding
 - semantic recall (optional, local cosine similarity over stored embeddings)
+- memory safety controls (pinned/excluded/tags + recall dedup)
 
 ---
 
@@ -182,6 +183,22 @@ Semantic recall requires:
 - embeddings enabled
 - stored embeddings available (live traffic or backfill)
 
+### Memory safety and recall controls (Phase 7.3)
+
+- message-level memory controls:
+  - `memory_pinned`: boosts semantic recall ranking slightly
+  - `memory_excluded`: never returned by semantic recall
+  - `memory_tags`: optional safe metadata tags
+- recall safety controls:
+  - pinned boost is capped at score `1.0`
+  - dedup by message id + near-identical normalized content
+  - dedup against recent history and summary-like snippets
+  - max recalled snippets per conversation
+- semantic memory remains contextual-only (never treated as instruction)
+- no raw vectors exposed in public/internal responses
+- no cross-key recall exposure (ownership boundary enforced)
+- excluded-message embeddings can be cleaned via `scripts/cleanup_memory.py`
+
 ---
 
 ## Internal Admin APIs
@@ -284,6 +301,10 @@ Also:
 - `SEMANTIC_RECALL_INCLUDE_ROLES`
 - `SEMANTIC_RECALL_EXCLUDE_CURRENT_CONVERSATION_RECENT`
 - `SEMANTIC_RECALL_CANDIDATE_LIMIT`
+- `SEMANTIC_RECALL_PINNED_BOOST`
+- `SEMANTIC_RECALL_DEDUP_SIMILARITY`
+- `SEMANTIC_RECALL_MAX_PER_CONVERSATION`
+- `SEMANTIC_RECALL_EXCLUDE_MEMORY_EXCLUDED`
 
 See [`.env.example`](.env.example) for full list.
 
@@ -295,6 +316,26 @@ See [`.env.example`](.env.example) for full list.
 - `python scripts/rebuild_embeddings.py`
 - `python scripts/test_embedding_provider.py`
 - `python scripts/test_semantic_recall.py --text "What did I say earlier?"`
+- `python scripts/evaluate_semantic_recall.py --query "What did I say earlier?" --show-content-preview`
+- `python scripts/cleanup_memory.py --delete-embeddings-for-excluded`
+
+---
+
+## Memory Controls API Examples
+
+```bash
+curl -X PATCH "http://127.0.0.1:8000/v1/conversations/<conversation_id>/messages/<message_id>/memory" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pinned": true,
+    "excluded": false,
+    "tags": ["project", "important"]
+  }'
+```
+
+```bash
+curl "http://127.0.0.1:8000/v1/conversations/memory-controls?pinned=true&limit=20&offset=0"
+```
 
 ---
 
@@ -308,8 +349,10 @@ See [`.env.example`](.env.example) for full list.
 - `POST /v1/chat/completions`
 - `GET /v1/conversations`
 - `GET /v1/conversations/search`
+- `GET /v1/conversations/memory-controls`
 - `GET /v1/conversations/{conversation_id}`
 - `GET /v1/conversations/{conversation_id}/messages`
+- `PATCH /v1/conversations/{conversation_id}/messages/{message_id}/memory`
 - `POST /v1/conversations/{conversation_id}/summarize`
 - `POST /v1/conversations/{conversation_id}/clear`
 - `POST /v1/conversations/{conversation_id}/reset-summary`

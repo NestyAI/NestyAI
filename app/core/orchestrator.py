@@ -506,9 +506,16 @@ class ChatOrchestrator:
             used=False,
             reason="disabled_global",
             matches_count=0,
+            pinned_matches_count=0,
+            excluded_matches_count=0,
+            deduped_count=0,
             top_k=max(1, int(getattr(self.settings, "semantic_recall_top_k", 5))),
             min_score=float(getattr(self.settings, "semantic_recall_min_score", 0.72)),
             max_score=None,
+            min_returned_score=None,
+            scope=str(getattr(self.settings, "semantic_recall_scope", "conversation")),
+            candidate_count=0,
+            used_context_chars=0,
         )
 
         if self.enable_input_guard:
@@ -527,12 +534,27 @@ class ChatOrchestrator:
             used=False,
             reason=str(semantic_decision.get("reason") or "disabled_global"),
             matches_count=0,
+            pinned_matches_count=0,
+            excluded_matches_count=0,
+            deduped_count=0,
             top_k=max(1, int(getattr(self.settings, "semantic_recall_top_k", 5))),
             min_score=float(getattr(self.settings, "semantic_recall_min_score", 0.72)),
             max_score=None,
+            min_returned_score=None,
+            scope=str(getattr(self.settings, "semantic_recall_scope", "conversation")),
+            candidate_count=0,
+            used_context_chars=0,
         )
         if semantic_decision.get("should_use"):
             exclude_message_ids: list[str] = []
+            summary_text = ""
+            for item in messages:
+                if item.role != "system":
+                    continue
+                if "Conversation summary so far" not in item.content:
+                    continue
+                summary_text = item.content[:4000]
+                break
             if bool(getattr(self.settings, "semantic_recall_exclude_current_conversation_recent", True)):
                 conversation_id = str(request.conversation_id or "").strip()
                 if conversation_id:
@@ -551,6 +573,8 @@ class ChatOrchestrator:
                     config=self.settings,
                     request_semantic_recall=request.semantic_recall,
                     exclude_message_ids=exclude_message_ids,
+                    summary_text=summary_text,
+                    include_pinned_boost=True,
                 )
             except Exception:
                 recall_result = {
@@ -562,6 +586,14 @@ class ChatOrchestrator:
                     "min_score": float(getattr(self.settings, "semantic_recall_min_score", 0.72)),
                     "matches": [],
                     "context_text": "",
+                    "pinned_matches_count": 0,
+                    "excluded_matches_count": 0,
+                    "deduped_count": 0,
+                    "max_score": None,
+                    "min_returned_score": None,
+                    "scope": str(getattr(self.settings, "semantic_recall_scope", "conversation")),
+                    "candidate_count": 0,
+                    "used_context_chars": 0,
                 }
             matches = list(recall_result.get("matches") or [])
             context_text = str(recall_result.get("context_text") or "").strip()
@@ -580,19 +612,35 @@ class ChatOrchestrator:
                 )
                 if context_sanitized:
                     rebuilt_context = self._rebuild_memory_context(matches, context_sanitized)
-                    messages = append_semantic_recall_context(messages, rebuilt_context or context_text)
+                    final_context = rebuilt_context or context_text
+                    messages = append_semantic_recall_context(messages, final_context)
                 else:
-                    messages = append_semantic_recall_context(messages, context_text)
-                max_score = max(float(item.get("score") or 0.0) for item in matches) if matches else None
+                    final_context = context_text
+                    messages = append_semantic_recall_context(messages, final_context)
                 semantic_recall_info = SemanticRecallInfo(
                     enabled=bool(recall_result.get("enabled")),
                     requested=str(recall_result.get("requested") or request.semantic_recall or "auto"),
                     used=True,
                     reason=str(recall_result.get("reason") or "semantic_recall_enabled"),
                     matches_count=len(matches),
+                    pinned_matches_count=int(recall_result.get("pinned_matches_count") or 0),
+                    excluded_matches_count=int(recall_result.get("excluded_matches_count") or 0),
+                    deduped_count=int(recall_result.get("deduped_count") or 0),
                     top_k=int(recall_result.get("top_k") or semantic_recall_info.top_k),
                     min_score=float(recall_result.get("min_score") or semantic_recall_info.min_score),
-                    max_score=max_score,
+                    max_score=(
+                        float(recall_result.get("max_score"))
+                        if recall_result.get("max_score") is not None
+                        else None
+                    ),
+                    min_returned_score=(
+                        float(recall_result.get("min_returned_score"))
+                        if recall_result.get("min_returned_score") is not None
+                        else None
+                    ),
+                    scope=str(recall_result.get("scope") or semantic_recall_info.scope),
+                    candidate_count=int(recall_result.get("candidate_count") or 0),
+                    used_context_chars=len(final_context),
                 )
             else:
                 semantic_recall_info = SemanticRecallInfo(
@@ -601,9 +649,24 @@ class ChatOrchestrator:
                     used=False,
                     reason=str(recall_result.get("reason") or "no_matches"),
                     matches_count=0,
+                    pinned_matches_count=int(recall_result.get("pinned_matches_count") or 0),
+                    excluded_matches_count=int(recall_result.get("excluded_matches_count") or 0),
+                    deduped_count=int(recall_result.get("deduped_count") or 0),
                     top_k=int(recall_result.get("top_k") or semantic_recall_info.top_k),
                     min_score=float(recall_result.get("min_score") or semantic_recall_info.min_score),
-                    max_score=None,
+                    max_score=(
+                        float(recall_result.get("max_score"))
+                        if recall_result.get("max_score") is not None
+                        else None
+                    ),
+                    min_returned_score=(
+                        float(recall_result.get("min_returned_score"))
+                        if recall_result.get("min_returned_score") is not None
+                        else None
+                    ),
+                    scope=str(recall_result.get("scope") or semantic_recall_info.scope),
+                    candidate_count=int(recall_result.get("candidate_count") or 0),
+                    used_context_chars=int(recall_result.get("used_context_chars") or 0),
                 )
 
         messages, search_sources, search_used_tools = await self._maybe_apply_search_context(
@@ -942,6 +1005,7 @@ class ChatOrchestrator:
             score = float(item.get("score") or 0.0)
             role = str(item.get("role") or "unknown")
             created_at = str(item.get("created_at") or "")
+            pinned = bool(item.get("pinned"))
             snippet = ""
             while snippet_index < len(lines):
                 line = lines[snippet_index]
@@ -951,7 +1015,8 @@ class ChatOrchestrator:
                     break
             if not snippet:
                 snippet = " "
-            rebuilt.append(f"[Memory {idx} | score={score:.2f} | role={role} | date={created_at}]\n{snippet}")
+            pinned_text = " | pinned" if pinned else ""
+            rebuilt.append(f"[Memory {idx} | score={score:.2f}{pinned_text} | role={role} | date={created_at}]\n{snippet}")
         return "\n\n".join(rebuilt).strip()
 
     def _get_recent_message_ids(self, conversation_id: str, limit: int) -> list[str]:

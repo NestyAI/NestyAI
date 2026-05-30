@@ -30,6 +30,7 @@ class InternalRecallTestRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
     min_score: float = Field(default=0.72, ge=0.0, le=1.0)
     api_key_id: str | None = None
+    include_pinned_boost: bool = True
 
 
 @router.post("/test")
@@ -86,17 +87,27 @@ async def test_semantic_recall(body: InternalRecallTestRequest) -> dict:
     effective_config.semantic_recall_scope = scope
     effective_config.semantic_recall_top_k = int(body.top_k)
     effective_config.semantic_recall_min_score = float(body.min_score)
-    recall = await retrieve_semantic_memories(
-        latest_user_message=body.text,
-        api_key_id=body.api_key_id,
-        conversation_id=body.conversation_id,
-        config=effective_config,
-        request_semantic_recall="on",
-        exclude_message_ids=[],
-    )
+    try:
+        recall = await retrieve_semantic_memories(
+            latest_user_message=body.text,
+            api_key_id=body.api_key_id,
+            conversation_id=body.conversation_id,
+            config=effective_config,
+            request_semantic_recall="on",
+            exclude_message_ids=[],
+            include_pinned_boost=bool(body.include_pinned_boost),
+        )
+    except Exception as exc:
+        raise APIError(
+            code="memory_eval_failed",
+            message="Failed to evaluate semantic recall.",
+            status_code=500,
+        ) from exc
 
     matches = []
     for item in recall.get("matches") or []:
+        if bool(item.get("excluded")):
+            continue
         preview = str(item.get("content") or "").strip()
         if len(preview) > 200:
             preview = preview[:200].rstrip() + "..."
@@ -106,6 +117,14 @@ async def test_semantic_recall(body: InternalRecallTestRequest) -> dict:
                 "conversation_id": item.get("conversation_id"),
                 "role": item.get("role"),
                 "score": float(item.get("score") or 0.0),
+                "raw_score": (
+                    float(item.get("raw_score") or 0.0)
+                    if body.include_pinned_boost and item.get("raw_score") is not None
+                    else None
+                ),
+                "pinned": bool(item.get("pinned")),
+                "excluded": False,
+                "tags": list(item.get("tags") or []),
                 "content_preview": preview,
             }
         )
@@ -113,5 +132,13 @@ async def test_semantic_recall(body: InternalRecallTestRequest) -> dict:
         "ok": True,
         "query_embedded": bool(recall.get("query_embedded")),
         "reason": str(recall.get("reason") or ""),
+        "scope": str(recall.get("scope") or scope),
+        "matches_count": len(matches),
+        "pinned_matches_count": int(recall.get("pinned_matches_count") or 0),
+        "excluded_matches_count": int(recall.get("excluded_matches_count") or 0),
+        "deduped_count": int(recall.get("deduped_count") or 0),
+        "candidate_count": int(recall.get("candidate_count") or 0),
+        "max_score": recall.get("max_score"),
+        "min_returned_score": recall.get("min_returned_score"),
         "matches": matches,
     }

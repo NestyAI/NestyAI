@@ -83,9 +83,16 @@ class SemanticRecallInfo(BaseModel):
     used: bool = False
     reason: str | None = None
     matches_count: int = 0
+    pinned_matches_count: int = 0
+    excluded_matches_count: int = 0
+    deduped_count: int = 0
     top_k: int = 0
     min_score: float = 0.0
     max_score: float | None = None
+    min_returned_score: float | None = None
+    scope: str = "conversation"
+    candidate_count: int = 0
+    used_context_chars: int = 0
 
 
 class ChatCompletionResponse(BaseModel):

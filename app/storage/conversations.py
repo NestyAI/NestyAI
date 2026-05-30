@@ -37,6 +37,48 @@ def _parse_metadata(raw: str | None) -> dict[str, Any] | None:
     return None
 
 
+def _parse_memory_tags(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    tags: list[str] = []
+    for item in parsed:
+        if not isinstance(item, str):
+            continue
+        cleaned = item.strip()
+        if cleaned:
+            tags.append(cleaned)
+    return tags
+
+
+def _sanitize_memory_tags(tags: list[str] | None) -> list[str]:
+    if tags is None:
+        return []
+    cleaned_tags: list[str] = []
+    seen: set[str] = set()
+    for item in tags:
+        if not isinstance(item, str):
+            continue
+        cleaned = item.strip()
+        if not cleaned:
+            continue
+        if len(cleaned) > 40:
+            continue
+        dedupe_key = cleaned.lower()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        cleaned_tags.append(cleaned)
+        if len(cleaned_tags) >= 10:
+            break
+    return cleaned_tags
+
+
 def create_conversation(
     api_key_id: str | None,
     title: str | None = None,
@@ -197,8 +239,8 @@ def add_message(
         conn.execute(
             """
             INSERT INTO conversation_messages
-            (id, conversation_id, role, content, model, provider, token_count, created_at, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, conversation_id, role, content, model, provider, token_count, memory_pinned, memory_excluded, memory_tags, memory_updated_at, created_at, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, ?, ?)
             """,
             (
                 message_id,
@@ -226,6 +268,10 @@ def add_message(
         "model": model,
         "provider": provider,
         "token_count": int(token_count),
+        "memory_pinned": False,
+        "memory_excluded": False,
+        "memory_tags": [],
+        "memory_updated_at": None,
         "created_at": now,
         "metadata": metadata or None,
     }
@@ -245,7 +291,8 @@ def get_recent_messages(
     with get_connection(_effective_db_path(db_path)) as conn:
         rows = conn.execute(
             """
-            SELECT id, conversation_id, role, content, model, provider, token_count, created_at, metadata
+            SELECT id, conversation_id, role, content, model, provider, token_count,
+                   memory_pinned, memory_excluded, memory_tags, memory_updated_at, created_at, metadata
             FROM conversation_messages
             WHERE conversation_id = ?
             ORDER BY created_at DESC
@@ -263,6 +310,10 @@ def get_recent_messages(
             "model": row["model"],
             "provider": row["provider"],
             "token_count": int(row["token_count"] or 0),
+            "memory_pinned": bool(int(row["memory_pinned"] or 0)),
+            "memory_excluded": bool(int(row["memory_excluded"] or 0)),
+            "memory_tags": _parse_memory_tags(row["memory_tags"]),
+            "memory_updated_at": row["memory_updated_at"],
             "created_at": row["created_at"],
             "metadata": _parse_metadata(row["metadata"]),
         }
@@ -281,7 +332,8 @@ def list_messages(
     with get_connection(_effective_db_path(db_path)) as conn:
         rows = conn.execute(
             f"""
-            SELECT id, conversation_id, role, content, model, provider, token_count, created_at, metadata
+            SELECT id, conversation_id, role, content, model, provider, token_count,
+                   memory_pinned, memory_excluded, memory_tags, memory_updated_at, created_at, metadata
             FROM conversation_messages
             WHERE conversation_id = ?
             ORDER BY created_at {order_sql}
@@ -302,6 +354,10 @@ def list_messages(
             "model": row["model"],
             "provider": row["provider"],
             "token_count": int(row["token_count"] or 0),
+            "memory_pinned": bool(int(row["memory_pinned"] or 0)),
+            "memory_excluded": bool(int(row["memory_excluded"] or 0)),
+            "memory_tags": _parse_memory_tags(row["memory_tags"]),
+            "memory_updated_at": row["memory_updated_at"],
             "created_at": row["created_at"],
             "metadata": _parse_metadata(row["metadata"]),
         }
@@ -404,7 +460,8 @@ def get_messages_after_summary(
     with get_connection(_effective_db_path(db_path)) as conn:
         rows = conn.execute(
             """
-            SELECT id, conversation_id, role, content, model, provider, token_count, created_at, metadata
+            SELECT id, conversation_id, role, content, model, provider, token_count,
+                   memory_pinned, memory_excluded, memory_tags, memory_updated_at, created_at, metadata
             FROM conversation_messages
             WHERE conversation_id = ?
             ORDER BY created_at ASC
@@ -424,6 +481,10 @@ def get_messages_after_summary(
             "model": row["model"],
             "provider": row["provider"],
             "token_count": int(row["token_count"] or 0),
+            "memory_pinned": bool(int(row["memory_pinned"] or 0)),
+            "memory_excluded": bool(int(row["memory_excluded"] or 0)),
+            "memory_tags": _parse_memory_tags(row["memory_tags"]),
+            "memory_updated_at": row["memory_updated_at"],
             "created_at": row["created_at"],
             "metadata": _parse_metadata(row["metadata"]),
         }
@@ -795,6 +856,191 @@ def get_recent_message_ids(
             (conversation_id, max(1, int(limit))),
         ).fetchall()
     return [str(row["id"]) for row in rows]
+
+
+def get_message_by_id(
+    message_id: str,
+    api_key_id: str | None = None,
+    db_path: str | None = None,
+) -> dict[str, Any] | None:
+    query = """
+        SELECT
+            m.id,
+            m.conversation_id,
+            m.role,
+            m.content,
+            m.model,
+            m.provider,
+            m.token_count,
+            m.memory_pinned,
+            m.memory_excluded,
+            m.memory_tags,
+            m.memory_updated_at,
+            m.created_at,
+            m.metadata
+        FROM conversation_messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.id = ? AND c.archived_at IS NULL
+    """
+    params: list[Any] = [message_id]
+    if api_key_id is None:
+        query += " AND c.api_key_id IS NULL"
+    else:
+        query += " AND c.api_key_id = ?"
+        params.append(api_key_id)
+    query += " LIMIT 1"
+
+    with get_connection(_effective_db_path(db_path)) as conn:
+        row = conn.execute(query, tuple(params)).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "conversation_id": row["conversation_id"],
+        "role": row["role"],
+        "content": row["content"],
+        "model": row["model"],
+        "provider": row["provider"],
+        "token_count": int(row["token_count"] or 0),
+        "memory_pinned": bool(int(row["memory_pinned"] or 0)),
+        "memory_excluded": bool(int(row["memory_excluded"] or 0)),
+        "memory_tags": _parse_memory_tags(row["memory_tags"]),
+        "memory_updated_at": row["memory_updated_at"],
+        "created_at": row["created_at"],
+        "metadata": _parse_metadata(row["metadata"]),
+    }
+
+
+def update_message_memory_controls(
+    message_id: str,
+    conversation_id: str,
+    api_key_id: str | None,
+    pinned: bool | None = None,
+    excluded: bool | None = None,
+    tags: list[str] | None = None,
+    db_path: str | None = None,
+) -> dict[str, Any] | None:
+    now = _now_iso()
+    query = """
+        SELECT m.id, m.conversation_id, m.memory_pinned, m.memory_excluded, m.memory_tags
+        FROM conversation_messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.id = ? AND m.conversation_id = ? AND c.archived_at IS NULL
+    """
+    params: list[Any] = [message_id, conversation_id]
+    if api_key_id is None:
+        query += " AND c.api_key_id IS NULL"
+    else:
+        query += " AND c.api_key_id = ?"
+        params.append(api_key_id)
+    query += " LIMIT 1"
+
+    with get_connection(_effective_db_path(db_path)) as conn:
+        existing = conn.execute(query, tuple(params)).fetchone()
+        if existing is None:
+            return None
+
+        current_pinned = bool(int(existing["memory_pinned"] or 0))
+        current_excluded = bool(int(existing["memory_excluded"] or 0))
+        current_tags = _parse_memory_tags(existing["memory_tags"])
+        next_pinned = current_pinned if pinned is None else bool(pinned)
+        next_excluded = current_excluded if excluded is None else bool(excluded)
+        next_tags = current_tags if tags is None else _sanitize_memory_tags(tags)
+
+        if excluded is True:
+            next_excluded = True
+            next_pinned = False
+        elif pinned is True:
+            next_pinned = True
+            next_excluded = False
+
+        tags_json = json.dumps(next_tags, ensure_ascii=True) if next_tags else None
+        conn.execute(
+            """
+            UPDATE conversation_messages
+            SET memory_pinned = ?, memory_excluded = ?, memory_tags = ?, memory_updated_at = ?
+            WHERE id = ? AND conversation_id = ?
+            """,
+            (
+                1 if next_pinned else 0,
+                1 if next_excluded else 0,
+                tags_json,
+                now,
+                message_id,
+                conversation_id,
+            ),
+        )
+        conn.execute(
+            "UPDATE conversations SET updated_at = ? WHERE id = ?",
+            (now, conversation_id),
+        )
+        conn.commit()
+
+    return get_message_by_id(message_id=message_id, api_key_id=api_key_id, db_path=db_path)
+
+
+def list_memory_controlled_messages(
+    api_key_id: str | None,
+    pinned: bool | None = None,
+    excluded: bool | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    db_path: str | None = None,
+) -> list[dict[str, Any]]:
+    query = """
+        SELECT
+            m.id,
+            m.conversation_id,
+            m.role,
+            m.content,
+            m.created_at,
+            m.memory_pinned,
+            m.memory_excluded,
+            m.memory_tags,
+            m.memory_updated_at
+        FROM conversation_messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE c.archived_at IS NULL
+    """
+    params: list[Any] = []
+    if api_key_id is None:
+        query += " AND c.api_key_id IS NULL"
+    else:
+        query += " AND c.api_key_id = ?"
+        params.append(api_key_id)
+    if pinned is not None:
+        query += " AND m.memory_pinned = ?"
+        params.append(1 if pinned else 0)
+    if excluded is not None:
+        query += " AND m.memory_excluded = ?"
+        params.append(1 if excluded else 0)
+    if pinned is None and excluded is None:
+        query += " AND (m.memory_pinned = 1 OR m.memory_excluded = 1 OR m.memory_tags IS NOT NULL)"
+    query += " ORDER BY COALESCE(m.memory_updated_at, m.created_at) DESC LIMIT ? OFFSET ?"
+    params.extend([max(1, int(limit)), max(0, int(offset))])
+
+    with get_connection(_effective_db_path(db_path)) as conn:
+        rows = conn.execute(query, tuple(params)).fetchall()
+
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        preview = " ".join(str(row["content"] or "").replace("\r", " ").replace("\n", " ").split())
+        if len(preview) > 200:
+            preview = preview[:200].rstrip() + "..."
+        items.append(
+            {
+                "id": row["id"],
+                "conversation_id": row["conversation_id"],
+                "role": row["role"],
+                "created_at": row["created_at"],
+                "content_preview": preview,
+                "memory_pinned": bool(int(row["memory_pinned"] or 0)),
+                "memory_excluded": bool(int(row["memory_excluded"] or 0)),
+                "memory_tags": _parse_memory_tags(row["memory_tags"]),
+                "memory_updated_at": row["memory_updated_at"],
+            }
+        )
+    return items
 
 
 def _search_messages_fts(

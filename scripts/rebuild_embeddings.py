@@ -37,16 +37,19 @@ async def _run(args) -> int:
     model = settings.embeddings_model
     limit = int(args.limit) if args.limit is not None else max(1, int(settings.embeddings_backfill_batch_size))
     limit = max(1, limit)
+    skip_excluded = bool(getattr(args, "skip_excluded", True))
 
     with get_connection(db_path) as conn:
+        excluded_filter_sql = " AND COALESCE(m.memory_excluded, 0) = 0" if skip_excluded else ""
         rows = conn.execute(
-            """
+            f"""
             SELECT m.id, m.conversation_id, m.role, m.content, c.api_key_id
             FROM conversation_messages m
             JOIN conversations c ON c.id = m.conversation_id
             LEFT JOIN embedding_records e
               ON e.owner_type = ? AND e.owner_id = m.id AND e.provider = ? AND e.model = ?
             WHERE e.id IS NULL
+              {excluded_filter_sql}
             ORDER BY m.created_at ASC
             LIMIT ?
             """,
@@ -82,6 +85,7 @@ async def _run(args) -> int:
     print(f"provider: {provider}")
     print(f"model: {model}")
     print(f"owner_type: {owner_type}")
+    print(f"skip_excluded: {skip_excluded}")
     print(f"candidates_found: {candidates}")
     print(f"embedded_count: {embedded_count}")
     print(f"skipped_count: {skipped_count}")
@@ -95,6 +99,9 @@ def main() -> int:
     parser.add_argument("--db", type=str, default=None, help="Optional DB path override.")
     parser.add_argument("--owner-type", type=str, default="conversation_message")
     parser.add_argument("--limit", type=int, default=None)
+    parser.set_defaults(skip_excluded=True)
+    parser.add_argument("--skip-excluded", dest="skip_excluded", action="store_true")
+    parser.add_argument("--include-excluded", dest="skip_excluded", action="store_false")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     return asyncio.run(_run(args))

@@ -85,6 +85,10 @@ def init_db(db_path: str) -> None:
                 model TEXT DEFAULT NULL,
                 provider TEXT DEFAULT NULL,
                 token_count INTEGER DEFAULT 0,
+                memory_pinned INTEGER NOT NULL DEFAULT 0,
+                memory_excluded INTEGER NOT NULL DEFAULT 0,
+                memory_tags TEXT DEFAULT NULL,
+                memory_updated_at TEXT DEFAULT NULL,
                 created_at TEXT NOT NULL,
                 metadata TEXT DEFAULT NULL
             )
@@ -170,6 +174,7 @@ def init_db(db_path: str) -> None:
         )
         _ensure_usage_logs_has_conversation_id(conn)
         _ensure_conversations_summary_columns(conn)
+        _ensure_conversation_messages_memory_columns(conn)
         conn.commit()
     _try_init_conversation_fts(db_path)
 
@@ -190,6 +195,19 @@ def _ensure_conversations_summary_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE conversations ADD COLUMN summary_updated_at TEXT DEFAULT NULL")
     if "summary_message_count" not in column_names:
         conn.execute("ALTER TABLE conversations ADD COLUMN summary_message_count INTEGER DEFAULT 0")
+
+
+def _ensure_conversation_messages_memory_columns(conn: sqlite3.Connection) -> None:
+    rows = conn.execute("PRAGMA table_info(conversation_messages)").fetchall()
+    column_names = {str(row[1]) for row in rows}
+    if "memory_pinned" not in column_names:
+        conn.execute("ALTER TABLE conversation_messages ADD COLUMN memory_pinned INTEGER NOT NULL DEFAULT 0")
+    if "memory_excluded" not in column_names:
+        conn.execute("ALTER TABLE conversation_messages ADD COLUMN memory_excluded INTEGER NOT NULL DEFAULT 0")
+    if "memory_tags" not in column_names:
+        conn.execute("ALTER TABLE conversation_messages ADD COLUMN memory_tags TEXT DEFAULT NULL")
+    if "memory_updated_at" not in column_names:
+        conn.execute("ALTER TABLE conversation_messages ADD COLUMN memory_updated_at TEXT DEFAULT NULL")
 
 
 def get_connection(db_path: str) -> sqlite3.Connection:

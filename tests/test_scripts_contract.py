@@ -43,6 +43,16 @@ def test_test_semantic_recall_module_import_has_no_side_effects() -> None:
     assert callable(module.main)
 
 
+def test_evaluate_semantic_recall_module_import_has_no_side_effects() -> None:
+    module = importlib.import_module("scripts.evaluate_semantic_recall")
+    assert callable(module.main)
+
+
+def test_cleanup_memory_module_import_has_no_side_effects() -> None:
+    module = importlib.import_module("scripts.cleanup_memory")
+    assert callable(module.main)
+
+
 def test_list_render_does_not_expose_key_hash() -> None:
     module = importlib.import_module("scripts.list_api_keys")
     lines = module.render_api_key_lines(

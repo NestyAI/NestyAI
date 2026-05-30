@@ -48,12 +48,23 @@ def test_internal_recall_endpoint_returns_preview_without_vectors(client, monkey
         return {
             "query_embedded": True,
             "reason": "semantic_recall_enabled",
+            "scope": "conversation",
+            "pinned_matches_count": 1,
+            "excluded_matches_count": 0,
+            "deduped_count": 2,
+            "candidate_count": 4,
+            "max_score": 0.91,
+            "min_returned_score": 0.88,
             "matches": [
                 {
                     "message_id": "msg_1",
                     "conversation_id": "conv_1",
                     "role": "user",
                     "score": 0.88,
+                    "raw_score": 0.80,
+                    "pinned": True,
+                    "excluded": False,
+                    "tags": ["important"],
                     "content": "A" * 260,
                 }
             ],
@@ -63,7 +74,7 @@ def test_internal_recall_endpoint_returns_preview_without_vectors(client, monkey
     response = client.post(
         "/internal/embeddings/recall-test",
         headers={"Authorization": "Bearer abc"},
-        json={"text": "What did I say?", "conversation_id": "conv_1"},
+        json={"text": "What did I say?", "conversation_id": "conv_1", "include_pinned_boost": True},
     )
     assert response.status_code == 200
     payload = response.json()
@@ -71,4 +82,6 @@ def test_internal_recall_endpoint_returns_preview_without_vectors(client, monkey
     assert payload["query_embedded"] is True
     assert payload["matches"][0]["message_id"] == "msg_1"
     assert "embedding" not in payload["matches"][0]
+    assert payload["matches"][0]["excluded"] is False
+    assert payload["matches"][0]["pinned"] is True
     assert len(payload["matches"][0]["content_preview"]) <= 203
