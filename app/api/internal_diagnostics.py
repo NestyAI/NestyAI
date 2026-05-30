@@ -51,6 +51,7 @@ async def list_provider_health_endpoint(
     status: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    since_seconds: int | None = None,
 ) -> dict:
     _require_diagnostics_enabled()
     if limit < 1 or limit > 200 or offset < 0:
@@ -65,6 +66,7 @@ async def list_provider_health_endpoint(
         status=status,
         limit=limit,
         offset=offset,
+        since_seconds=since_seconds,
     )
     return {
         "object": "list",
@@ -79,14 +81,48 @@ async def list_provider_health_endpoint(
 
 
 @router.get("/provider-health/latest")
-async def latest_provider_health_endpoint(provider: str | None = None, model_alias: str | None = None) -> dict:
+async def latest_provider_health_endpoint(
+    provider: str | None = None,
+    model_alias: str | None = None,
+    since_seconds: int | None = None,
+) -> dict:
     _require_diagnostics_enabled()
-    rows = get_latest_provider_health(provider=provider, model_alias=model_alias)
-    summary = summarize_provider_health()
+    rows = get_latest_provider_health(provider=provider, model_alias=model_alias, since_seconds=since_seconds)
+    summary = summarize_provider_health(provider=provider, model_alias=model_alias, since_seconds=since_seconds)
     return {
         "object": "list",
         "data": rows,
         "summary": summary,
+    }
+
+
+@router.get("/provider-health/summary")
+async def provider_health_summary_endpoint(
+    provider: str | None = None,
+    model_alias: str | None = None,
+    since_seconds: int | None = None,
+) -> dict:
+    _require_diagnostics_enabled()
+    summary = summarize_provider_health(
+        provider=provider,
+        model_alias=model_alias,
+        since_seconds=since_seconds,
+    )
+    latest_by_target = get_latest_provider_health(
+        provider=provider,
+        model_alias=model_alias,
+        since_seconds=since_seconds,
+    )
+    return {
+        "summary": {
+            "total_checks": int(summary.get("total_checks") or 0),
+            "ok": int(summary.get("ok") or 0),
+            "failed": int(summary.get("failed") or 0),
+            "unavailable": int(summary.get("unavailable") or 0),
+            "timeout": int(summary.get("timeout") or 0),
+            "skipped": int(summary.get("skipped") or 0),
+        },
+        "latest_by_target": latest_by_target,
     }
 
 

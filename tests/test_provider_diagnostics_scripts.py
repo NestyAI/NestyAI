@@ -44,6 +44,7 @@ def test_benchmark_provider_chains_json_output(monkeypatch, capsys) -> None:
         message="Reply with exactly: OK",
         json=True,
         dry_run=True,
+        only_unhealthy=False,
         save=True,
     )
     code = asyncio.run(module._run(args))
@@ -59,7 +60,7 @@ def test_provider_health_summary_json_output(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         module,
         "get_latest_provider_health",
-        lambda provider=None, model_alias=None: [
+        lambda provider=None, model_alias=None, since_seconds=None: [
             {
                 "provider": "openrouter",
                 "model_alias": "nesty-combined-1.0",
@@ -75,9 +76,23 @@ def test_provider_health_summary_json_output(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         module,
         "summarize_provider_health",
-        lambda: {"total_checks": 1, "avg_latency_ms": 120.0, "status_counts": {"ok": 1}},
+        lambda provider=None, model_alias=None, since_seconds=None: {
+            "total_checks": 1,
+            "avg_latency_ms": 120.0,
+            "status_counts": {"ok": 1},
+        },
     )
-    code = module._run(argparse.Namespace(limit=10, provider=None, model_alias=None, json=True))
+    monkeypatch.setattr(module, "get_settings", lambda: type("S", (), {"provider_health_ttl_seconds": 900})())
+    code = module._run(
+        argparse.Namespace(
+            limit=10,
+            provider=None,
+            model_alias=None,
+            since_seconds=None,
+            only_unhealthy=False,
+            json=True,
+        )
+    )
     out = capsys.readouterr().out.strip()
     assert code == 0
     payload = json.loads(out)

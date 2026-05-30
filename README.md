@@ -28,7 +28,7 @@ NestyAI is a personal AI gateway focused on:
 - optional embeddings + semantic recall foundation
 - deterministic local-first architecture (SQLite)
 
-Current status: **Phase 8.0 completed**.
+Current status: **Phase 8.1 completed**.
 
 ---
 
@@ -217,6 +217,20 @@ Semantic recall requires:
   - OpenRouter free models may be rate-limited
   - results can vary by time, region, and provider availability
 
+### Diagnostics polish and health-aware routing (Phase 8.1)
+
+- health summary endpoint and script improvements for ops visibility
+- optional health-aware routing gate for provider chains (disabled by default)
+- freshness and staleness controls:
+  - `PROVIDER_HEALTH_TTL_SECONDS`
+  - `PROVIDER_HEALTH_FAILURE_THRESHOLD`
+  - `PROVIDER_HEALTH_SKIP_STATUSES`
+  - `PROVIDER_HEALTH_ALLOW_STALE_AFTER_SECONDS`
+- fallback behavior:
+  - if all targets are marked unhealthy and strict mode is off, router falls back to normal chain
+  - strict mode can block all skipped targets safely with structured error
+- stream and non-stream flows keep the same API contract; provider health metadata is additive only
+
 ---
 
 ## Internal Admin APIs
@@ -241,6 +255,7 @@ These endpoints are **server-to-server internal APIs** and should not be exposed
 
 - `GET /internal/diagnostics/provider-health`
 - `GET /internal/diagnostics/provider-health/latest`
+- `GET /internal/diagnostics/provider-health/summary`
 - `POST /internal/diagnostics/provider-health/check`
 - `POST /internal/diagnostics/provider-model/check`
 
@@ -339,6 +354,15 @@ Also:
 - `DIAGNOSTICS_SAVE_RESULTS`
 - `DIAGNOSTICS_OUTPUT_PREVIEW_CHARS`
 
+### Health-aware routing
+
+- `PROVIDER_HEALTH_AWARE_ROUTING`
+- `PROVIDER_HEALTH_STRICT_MODE`
+- `PROVIDER_HEALTH_TTL_SECONDS`
+- `PROVIDER_HEALTH_FAILURE_THRESHOLD`
+- `PROVIDER_HEALTH_SKIP_STATUSES`
+- `PROVIDER_HEALTH_ALLOW_STALE_AFTER_SECONDS`
+
 See [`.env.example`](.env.example) for full list.
 
 ---
@@ -352,7 +376,24 @@ See [`.env.example`](.env.example) for full list.
 - `python scripts/evaluate_semantic_recall.py --query "What did I say earlier?" --show-content-preview`
 - `python scripts/cleanup_memory.py --delete-embeddings-for-excluded`
 - `python scripts/benchmark_provider_chains.py --include-roles`
-- `python scripts/provider_health_summary.py --limit 50`
+- `python scripts/benchmark_provider_chains.py --include-roles --only-unhealthy`
+- `python scripts/provider_health_summary.py --limit 50 --since-seconds 3600`
+
+Scheduler examples (manual ops wiring, no built-in scheduler):
+
+- Windows Task Scheduler:
+  - `python scripts/benchmark_provider_chains.py --include-roles`
+- Linux cron:
+  - `*/30 * * * * cd /path/to/nesty-ai && .venv/bin/python scripts/benchmark_provider_chains.py --include-roles`
+- Docker Compose:
+  - `docker compose exec nesty-ai python scripts/benchmark_provider_chains.py --include-roles`
+
+Operational warning:
+
+- diagnostics consume provider quota
+- keep diagnostic intervals conservative
+- free-tier providers may rate-limit or throttle
+- health-aware routing is optional and disabled by default
 
 ---
 
@@ -430,4 +471,4 @@ curl "http://127.0.0.1:8000/v1/conversations/memory-controls?pinned=true&limit=2
 
 ## Next Phase
 
-Recommended next target: **Phase 8.1 - Automated Routing Quality Controls** (provider scorecard weighting, adaptive fallback tuning, regression guardrails).
+Recommended next target: **Phase 8.2 - Provider Reliability Scoring** (weighted health windows, alias-level score trends, safe auto-tuning hints).

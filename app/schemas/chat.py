@@ -95,6 +95,20 @@ class SemanticRecallInfo(BaseModel):
     used_context_chars: int = 0
 
 
+class ProviderHealthSkippedTarget(BaseModel):
+    provider: str
+    model: str
+    reason: str
+
+
+class ProviderHealthInfo(BaseModel):
+    aware_routing: bool = False
+    strict_mode: bool = False
+    skipped_targets: list[ProviderHealthSkippedTarget] = Field(default_factory=list)
+    fallback_to_unhealthy_allowed: bool = False
+    all_targets_skipped: bool = False
+
+
 class ChatCompletionResponse(BaseModel):
     id: str
     object: str = "chat.completion"
@@ -108,5 +122,6 @@ class ChatCompletionResponse(BaseModel):
     sources: list[SourceItem] = Field(default_factory=list)
     orchestration: OrchestrationInfo | None = None
     semantic_recall: SemanticRecallInfo | None = None
+    provider_health: ProviderHealthInfo | None = None
     auth: AuthDebugInfo | None = None
     conversation: ConversationInfo | None = None

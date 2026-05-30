@@ -95,6 +95,12 @@ class Settings(BaseModel):
     diagnostics_test_max_tokens: int = 16
     diagnostics_save_results: bool = True
     diagnostics_output_preview_chars: int = 80
+    provider_health_aware_routing: bool = False
+    provider_health_strict_mode: bool = False
+    provider_health_ttl_seconds: int = 900
+    provider_health_failure_threshold: int = 2
+    provider_health_skip_statuses: str = "failed,unavailable,timeout"
+    provider_health_allow_stale_after_seconds: int = 3600
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -197,6 +203,14 @@ class Settings(BaseModel):
             diagnostics_test_max_tokens=int(os.getenv("DIAGNOSTICS_TEST_MAX_TOKENS", "16")),
             diagnostics_save_results=_to_bool(os.getenv("DIAGNOSTICS_SAVE_RESULTS"), True),
             diagnostics_output_preview_chars=int(os.getenv("DIAGNOSTICS_OUTPUT_PREVIEW_CHARS", "80")),
+            provider_health_aware_routing=_to_bool(os.getenv("PROVIDER_HEALTH_AWARE_ROUTING"), False),
+            provider_health_strict_mode=_to_bool(os.getenv("PROVIDER_HEALTH_STRICT_MODE"), False),
+            provider_health_ttl_seconds=int(os.getenv("PROVIDER_HEALTH_TTL_SECONDS", "900")),
+            provider_health_failure_threshold=int(os.getenv("PROVIDER_HEALTH_FAILURE_THRESHOLD", "2")),
+            provider_health_skip_statuses=os.getenv("PROVIDER_HEALTH_SKIP_STATUSES", "failed,unavailable,timeout"),
+            provider_health_allow_stale_after_seconds=int(
+                os.getenv("PROVIDER_HEALTH_ALLOW_STALE_AFTER_SECONDS", "3600")
+            ),
         )
 
 

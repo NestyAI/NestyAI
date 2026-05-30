@@ -54,10 +54,12 @@ def get_providers() -> dict[str, BaseProvider]:
 @lru_cache(maxsize=1)
 def get_provider_router() -> ProviderRouter:
     logger = get_logger("nesty.router")
+    settings = get_settings()
     return ProviderRouter(
         models_config=get_models_config(),
         providers=get_providers(),
         logger=logger,
+        settings=settings,
     )
 
 

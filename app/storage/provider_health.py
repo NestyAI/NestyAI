@@ -15,6 +15,19 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _since_iso(since_seconds: int | None) -> str | None:
+    if since_seconds is None:
+        return None
+    try:
+        seconds = int(since_seconds)
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0:
+        return None
+    cutoff = datetime.now(timezone.utc).timestamp() - float(seconds)
+    return datetime.fromtimestamp(cutoff, tz=timezone.utc).isoformat()
+
+
 def get_settings():
     from app.deps import get_settings as deps_get_settings
 
@@ -125,6 +138,7 @@ def list_provider_health_checks(
     status: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    since_seconds: int | None = None,
     db_path: str | None = None,
 ) -> list[dict[str, Any]]:
     sql = """
@@ -143,6 +157,10 @@ def list_provider_health_checks(
     if status:
         sql += " AND status = ?"
         params.append(_normalize_status(status))
+    since_iso = _since_iso(since_seconds)
+    if since_iso:
+        sql += " AND checked_at >= ?"
+        params.append(since_iso)
     sql += " ORDER BY checked_at DESC LIMIT ? OFFSET ?"
     params.extend([max(1, int(limit)), max(0, int(offset))])
 
@@ -171,6 +189,7 @@ def list_provider_health_checks(
 def get_latest_provider_health(
     provider: str | None = None,
     model_alias: str | None = None,
+    since_seconds: int | None = None,
     db_path: str | None = None,
 ) -> list[dict[str, Any]]:
     sql = """
@@ -190,6 +209,10 @@ def get_latest_provider_health(
     if model_alias:
         sql += " AND model_alias = ?"
         params.append(str(model_alias).strip())
+    since_iso = _since_iso(since_seconds)
+    if since_iso:
+        sql += " AND checked_at >= ?"
+        params.append(since_iso)
     sql += """
             GROUP BY provider, model, model_alias_key, role_key
         ) latest
@@ -222,35 +245,65 @@ def get_latest_provider_health(
     ]
 
 
-def summarize_provider_health(db_path: str | None = None) -> dict[str, Any]:
+def summarize_provider_health(
+    provider: str | None = None,
+    model_alias: str | None = None,
+    since_seconds: int | None = None,
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    where = " WHERE 1=1"
+    params: list[Any] = []
+    if provider:
+        where += " AND provider = ?"
+        params.append(str(provider).strip())
+    if model_alias:
+        where += " AND model_alias = ?"
+        params.append(str(model_alias).strip())
+    since_iso = _since_iso(since_seconds)
+    if since_iso:
+        where += " AND checked_at >= ?"
+        params.append(since_iso)
+
     with get_connection(_effective_db_path(db_path)) as conn:
-        total_row = conn.execute("SELECT COUNT(*) AS total FROM provider_health_checks").fetchone()
+        total_row = conn.execute(f"SELECT COUNT(*) AS total FROM provider_health_checks{where}", tuple(params)).fetchone()
         status_rows = conn.execute(
-            """
+            f"""
             SELECT status, COUNT(*) AS count
             FROM provider_health_checks
+            {where}
             GROUP BY status
-            """
+            """,
+            tuple(params),
         ).fetchall()
         provider_rows = conn.execute(
-            """
+            f"""
             SELECT provider,
                    COUNT(*) AS total,
                    AVG(CASE WHEN latency_ms IS NOT NULL THEN latency_ms END) AS avg_latency_ms
             FROM provider_health_checks
+            {where}
             GROUP BY provider
             ORDER BY provider ASC
-            """
+            """,
+            tuple(params),
         ).fetchall()
         latency_row = conn.execute(
-            """
+            f"""
             SELECT AVG(CASE WHEN latency_ms IS NOT NULL THEN latency_ms END) AS avg_latency_ms
             FROM provider_health_checks
-            """
+            {where}
+            """,
+            tuple(params),
         ).fetchone()
+    status_counts = {str(row["status"]): int(row["count"] or 0) for row in status_rows}
     return {
         "total_checks": int(total_row["total"] or 0) if total_row else 0,
-        "status_counts": {str(row["status"]): int(row["count"] or 0) for row in status_rows},
+        "ok": int(status_counts.get("ok", 0)),
+        "failed": int(status_counts.get("failed", 0)),
+        "unavailable": int(status_counts.get("unavailable", 0)),
+        "timeout": int(status_counts.get("timeout", 0)),
+        "skipped": int(status_counts.get("skipped", 0)),
+        "status_counts": status_counts,
         "avg_latency_ms": float(latency_row["avg_latency_ms"]) if latency_row and latency_row["avg_latency_ms"] is not None else None,
         "providers": [
             {

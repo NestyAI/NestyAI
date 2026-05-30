@@ -30,6 +30,7 @@ from app.schemas.chat import (
     ConversationInfo,
     GuardInfo,
     OrchestrationInfo,
+    ProviderHealthInfo,
     SemanticRecallInfo,
     Usage,
 )
@@ -60,6 +61,7 @@ class StreamOutcome:
     conversation_summary_updated: bool = False
     orchestration: OrchestrationInfo = field(default_factory=OrchestrationInfo)
     semantic_recall: SemanticRecallInfo = field(default_factory=SemanticRecallInfo)
+    provider_health: ProviderHealthInfo | None = None
 
 
 @dataclass
@@ -145,6 +147,7 @@ class ChatOrchestrator:
             response_text = ""
             provider_used = ""
             usage = Usage()
+            provider_health_info: ProviderHealthInfo | None = None
 
             if decision.get("should_use"):
                 try:
@@ -207,6 +210,9 @@ class ChatOrchestrator:
                 )
                 response_text = route_result.provider_result.content
                 provider_used = route_result.provider_used
+                raw_provider_health = getattr(route_result, "provider_health", None)
+                if isinstance(raw_provider_health, dict):
+                    provider_health_info = ProviderHealthInfo.model_validate(raw_provider_health)
                 usage = Usage(
                     prompt_tokens=route_result.provider_result.usage.prompt_tokens,
                     completion_tokens=route_result.provider_result.usage.completion_tokens,
@@ -248,6 +254,7 @@ class ChatOrchestrator:
                 sources=self._dedupe_sources(sources),
                 orchestration=orchestration,
                 semantic_recall=semantic_recall,
+                provider_health=provider_health_info,
             )
         except APIError as exc:
             log_safe(
@@ -314,6 +321,11 @@ class ChatOrchestrator:
             conversation_summary_updated=request.conversation_summary_updated if request.store else False,
             orchestration=self._orchestration_info_from_decision(decision),
             semantic_recall=semantic_recall,
+            provider_health=(
+                ProviderHealthInfo.model_validate(getattr(stream_result, "provider_health"))
+                if isinstance(getattr(stream_result, "provider_health", None), dict)
+                else None
+            ),
         )
 
         async def stream_events() -> AsyncIterator[str]:
@@ -439,6 +451,7 @@ class ChatOrchestrator:
                     "usage": outcome.usage.model_dump(),
                     "orchestration": outcome.orchestration.model_dump(),
                     "semantic_recall": outcome.semantic_recall.model_dump(),
+                    "provider_health": outcome.provider_health.model_dump() if outcome.provider_health else None,
                     "conversation": (
                         ConversationInfo(
                             id=outcome.conversation_id,

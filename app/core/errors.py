@@ -66,6 +66,8 @@ ERROR_CODES = {
     "provider_diagnostic_failed",
     "provider_health_not_found",
     "invalid_diagnostic_request",
+    "provider_health_unavailable",
+    "provider_health_strict_blocked",
 }
 
 
