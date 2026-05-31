@@ -159,3 +159,29 @@ def revoke_api_key(db_path: str, key_id: str) -> bool:
         conn.commit()
     return cursor.rowcount > 0
 
+
+def revoke_active_api_keys_by_marker(
+    db_path: str,
+    *,
+    name: str,
+    environment: str,
+    key_prefix_startswith: str | None = None,
+) -> int:
+    params: list[Any] = [_now_iso(), name, environment]
+    where_prefix = ""
+    if key_prefix_startswith:
+        where_prefix = " AND key_prefix LIKE ?"
+        params.append(f"{key_prefix_startswith}%")
+
+    with get_connection(db_path) as conn:
+        cursor = conn.execute(
+            f"""
+            UPDATE api_keys
+            SET is_active = 0, revoked_at = ?
+            WHERE is_active = 1 AND name = ? AND environment = ?{where_prefix}
+            """,
+            tuple(params),
+        )
+        conn.commit()
+    return max(0, int(cursor.rowcount))
+

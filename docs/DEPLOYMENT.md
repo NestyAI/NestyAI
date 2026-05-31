@@ -130,7 +130,42 @@ INTERNAL_ADMIN_ENABLED=false
 
 ---
 
-## 4. Production Hardening Settings
+## 4. Ephemeral Console API Key for Panel Deployments
+
+Some container panel consoles are not interactive shells. In those environments, commands like
+`python scripts/create_api_key.py ...` might not run reliably from the panel console.
+
+NestyAI can optionally generate an ephemeral Nesty Console API key at startup:
+
+```env
+NESTY_EPHEMERAL_CONSOLE_KEY_ENABLED=true
+NESTY_EPHEMERAL_CONSOLE_KEY_NAME=nesty-console-ephemeral
+NESTY_EPHEMERAL_CONSOLE_KEY_ENV=prod
+NESTY_EPHEMERAL_CONSOLE_KEY_DAILY_LIMIT=10000
+NESTY_EPHEMERAL_CONSOLE_KEY_MONTHLY_LIMIT=
+NESTY_EPHEMERAL_CONSOLE_KEY_MODELS=nesty-flash-1.0,nesty-combined-1.0,nesty-pro-1.0
+NESTY_EPHEMERAL_CONSOLE_KEY_PREFIX=nsk_console
+```
+
+Flow:
+
+1. Restart Gateway with `python run.py`.
+2. Copy the printed `EPHEMERAL NESTY CONSOLE API KEY` value from startup logs.
+3. Paste it into Nesty Console Gateway credentials as `NESTY_API_KEY`.
+4. On the next Gateway restart, the key rotates and Console credentials must be updated again.
+
+Important notes:
+
+- This startup key is intended for Console-to-Gateway control only, not external users.
+- Persistent API keys created via scripts or Console UI remain untouched.
+- Never commit or publicly share screenshots of the printed key.
+- Internal admin token is separate and should normally stay stable in env:
+  - Gateway: `INTERNAL_ADMIN_ENABLED=true` and `NESTY_INTERNAL_ADMIN_TOKEN=...`
+  - Console: `NESTY_CONSOLE_ENABLE_INTERNAL_ADMIN=true` and `NESTY_INTERNAL_ADMIN_TOKEN=...`
+
+---
+
+## 5. Production Hardening Settings
 
 When deploying NestyAI to production, configure these security and optimization settings in your `.env`:
 
@@ -157,7 +192,7 @@ TRUSTED_HOSTS=your-gateway-host.com
 
 ---
 
-## 5. Operational Notes
+## 6. Operational Notes
 
 > [!WARNING]
 > **Provider Diagnostics & Quotas**: 

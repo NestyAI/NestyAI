@@ -12,9 +12,11 @@ Tracking rule:
 ### Added
 - Added optional Cloudflare Tunnel deployment preset with Docker Compose sidecar support and Pterodactyl/container-panel environment variables.
 - Added optional runtime Cloudflare Tunnel launcher for Pterodactyl/container-panel deployments.
+- Added optional ephemeral startup API key generation for Nesty Console in Pterodactyl/container-panel deployments where scripts cannot be run interactively.
 
 ### Documentation
 - Documented HTTPS tunnel deployment reminders for CORS, trusted hosts, tunnel secrets, and future Nesty Console/NestyChat usage.
+- Documented how Console users can copy the ephemeral key from Gateway startup logs and update Console credentials after Gateway restarts.
 
 ## [Phase 10.0] - Gateway Core v1 Stabilization
 - Bump version to `1.0.0` for official stable release.

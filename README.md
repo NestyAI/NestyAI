@@ -106,6 +106,7 @@ Server:
 Optional Cloudflare Tunnel deployment is supported.
 Docker Compose sidecar and Pterodactyl/container-panel modes are documented.
 For Pterodactyl/container-panel deployments, `python run.py` can start `cloudflared` alongside Gateway when tunnel env vars are enabled.
+Pterodactyl/container-panel users can enable an ephemeral startup Console API key if they cannot run scripts interactively.
 Full details: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 
 ---
