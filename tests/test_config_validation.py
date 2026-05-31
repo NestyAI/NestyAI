@@ -173,3 +173,45 @@ def test_validate_runtime_setup_with_keys(tmp_path: Path) -> None:
     assert "groq_api_key" in res_map["env_var_groq_api_key"]["name"]
     assert res_map["env_var_groq_api_key"]["status"] == "PASS"
     assert res_map["env_var_nvidia_api_key"]["status"] == "WARN"
+
+
+def test_env_example_contains_cloudflare_tunnel_preset_vars() -> None:
+    env_text = Path(".env.example").read_text(encoding="utf-8")
+    required_lines = [
+        "CLOUDFLARE_TUNNEL_TOKEN=",
+        "CLOUDFLARE_TUNNEL_ENABLED=false",
+        "TUNNEL_AUTO_INSTALL_CLOUDFLARED=1",
+        "CLOUDFLARED_BIN_PATH=/home/container/.cloudflared/bin/cloudflared",
+        "TUNNEL_ENABLED=1",
+        "CLOUDFLARED_LOG_PATH=./cloudflare/cloudflared.log",
+        "CLOUDFLARED_PID_PATH=./cloudflare/cloudflared.pid",
+    ]
+    for line in required_lines:
+        assert line in env_text
+
+
+def test_deployment_doc_mentions_cloudflare_tunnel_modes() -> None:
+    deployment_doc = Path("docs/DEPLOYMENT.md").read_text(encoding="utf-8")
+    assert "Cloudflare Tunnel Deployment" in deployment_doc
+    assert "Mode A: Docker Compose sidecar" in deployment_doc
+    assert "Mode B: Pterodactyl / container-panel mode" in deployment_doc
+
+
+def test_gitignore_protects_ai_and_cloudflared_runtime() -> None:
+    ignored = Path(".gitignore").read_text(encoding="utf-8")
+    assert "AI.md" in ignored
+    assert ".cloudflared/" in ignored
+    assert "cloudflare/.log" in ignored
+    assert "cloudflare/.pid" in ignored
+
+
+def test_validate_runtime_setup_does_not_require_cloudflare_tunnel_token(tmp_path: Path) -> None:
+    settings = Settings(
+        nesty_db_path=str(tmp_path / "test_tunnel_optional.db"),
+        groq_api_key="",
+        openrouter_api_key="",
+        nvidia_api_key="",
+    )
+    results = validate_runtime_setup(settings)
+    failures = [item for item in results if item["status"] == "FAIL"]
+    assert not failures

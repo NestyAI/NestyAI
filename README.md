@@ -103,6 +103,11 @@ Server:
 
 - `http://127.0.0.1:8000`
 
+Optional Cloudflare Tunnel deployment is supported.
+Docker Compose sidecar and Pterodactyl/container-panel modes are documented.
+For Pterodactyl/container-panel deployments, `python run.py` can start `cloudflared` alongside Gateway when tunnel env vars are enabled.
+Full details: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+
 ---
 
 ## API Quick Examples

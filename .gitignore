@@ -4,6 +4,12 @@
 venv/
 env/
 AI.md
+.cloudflared/
+cloudflare/.log
+cloudflare/.pid
+cloudflare/*.log
+cloudflare/*.pid
+*cloudflare/*.pid
 
 # Local data / databases
 data/

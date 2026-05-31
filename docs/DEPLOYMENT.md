@@ -54,20 +54,79 @@ Docker is the recommended approach for hosting NestyAI continuously.
 
 ## 3. Cloudflare Tunnel Deployment
 
-For a secure personal deployment without opening ports on your home router:
+Cloudflare Tunnel is optional. It is useful when the Gateway runs on a private host/container but needs a public HTTPS URL. This helps avoid browser mixed-content and cleartext HTTP issues for future Nesty Console / NestyChat Web clients.
 
-1. **Set Up Cloudflare Tunnel**:
-   - Install `cloudflared` on your host.
-   - Run `cloudflared tunnel create <tunnel-name>`.
-2. **Route Traffic**:
-   Route your public domain (e.g. `gateway.example.com`) to the local port `http://localhost:8000`.
-3. **Configure CORS & Trusted Hosts**:
-   In `.env`, set:
-   ```env
-   TRUSTED_HOSTS=gateway.example.com
-   CORS_ALLOW_ORIGINS=https://your-ui-app.example.com
-   ```
-   This prevents unauthorized domain hosts or unsafe browsers from querying your gateway.
+Create your tunnel token in the Cloudflare Zero Trust dashboard, then store it only in `.env`, server environment variables, or panel secrets. Never commit the token.
+
+### Mode A: Docker Compose sidecar
+
+This mode runs `cloudflared` as a sidecar using the `cloudflare/cloudflared` image.
+
+Required environment variable:
+
+```env
+CLOUDFLARE_TUNNEL_TOKEN=
+```
+
+Start:
+
+```bash
+docker compose --profile tunnel up -d
+```
+
+Logs:
+
+```bash
+docker compose logs -f cloudflared
+```
+
+If using a split override file approach instead of Compose profiles:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d
+```
+
+### Mode B: Pterodactyl / container-panel mode
+
+Use this for managed container environments where `cloudflared` is installed/started inside the same server container as NestyAI.
+
+Recommended environment values:
+
+```env
+CLOUDFLARE_TUNNEL_TOKEN=
+TUNNEL_AUTO_INSTALL_CLOUDFLARED=1
+CLOUDFLARED_BIN_PATH=/home/container/.cloudflared/bin/cloudflared
+TUNNEL_ENABLED=1
+CLOUDFLARED_LOG_PATH=./cloudflare/cloudflared.log
+CLOUDFLARED_PID_PATH=./cloudflare/cloudflared.pid
+```
+
+Notes:
+
+- Panel startup command should be:
+  ```bash
+  python run.py
+  ```
+- With `TUNNEL_ENABLED=1` and `CLOUDFLARE_TUNNEL_TOKEN` set, `python run.py` starts `cloudflared` automatically before Gateway startup.
+- If `cloudflared` binary is missing and `TUNNEL_AUTO_INSTALL_CLOUDFLARED=1`, `run.py` attempts a best-effort install to `CLOUDFLARED_BIN_PATH`.
+- If tunnel is disabled or setup fails safely, Gateway still starts normally on local HTTP.
+- `CLOUDFLARED_LOG_PATH` and `CLOUDFLARED_PID_PATH` must point to writable directories.
+- `.cloudflared/` and `cloudflare/` runtime artifacts should never be committed.
+- Gateway still listens locally on HTTP (usually port `8000`).
+
+Production reminders:
+
+```env
+APP_ENV=production
+REQUIRE_API_KEY=true
+NESTY_API_KEY_HASH_SECRET=<set-a-strong-secret>
+CORS_ALLOW_ORIGINS=https://your-exact-frontend-origin.example.com
+TRUSTED_HOSTS=your-tunnel-public-hostname.example.com
+INTERNAL_ADMIN_ENABLED=false
+```
+
+- Never expose `NESTY_INTERNAL_ADMIN_TOKEN` to browser/mobile clients.
+- Verify `/health` and `/ready` through the public tunnel URL after deployment.
 
 ---
 

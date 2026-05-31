@@ -8,3 +8,13 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared
+    container_name: nesty-ai-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - nesty-ai
+    profiles:
+      - tunnel

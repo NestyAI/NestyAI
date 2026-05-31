@@ -2,6 +2,20 @@
 
 All notable changes to the NestyAI project are documented in this file.
 
+Tracking rule:
+- This file is the public, versioned feature changelog.
+- Each version entry should describe user-visible capabilities and behavior in plain language.
+- Internal architecture notes and deep technical change logs belong in `AI.md`.
+
+## [1.0.2] - Unreleased
+
+### Added
+- Added optional Cloudflare Tunnel deployment preset with Docker Compose sidecar support and Pterodactyl/container-panel environment variables.
+- Added optional runtime Cloudflare Tunnel launcher for Pterodactyl/container-panel deployments.
+
+### Documentation
+- Documented HTTPS tunnel deployment reminders for CORS, trusted hosts, tunnel secrets, and future Nesty Console/NestyChat usage.
+
 ## [Phase 10.0] - Gateway Core v1 Stabilization
 - Bump version to `1.0.0` for official stable release.
 - Update compatibility guarantees and API contract references.
