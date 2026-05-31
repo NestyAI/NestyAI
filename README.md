@@ -1,66 +1,103 @@
-<p align="center">
+﻿<p align="center">
   <img src="public/NestyAI_Full.svg" alt="NestyAI" width="560" />
 </p>
 
 <p align="center">
-  <strong>NestyAI</strong><br/>
-  Production-ready personal FastAPI AI Gateway with OpenAI-compatible chat API.
+  <strong>NestyAI Gateway</strong><br/>
+  Production-ready, self-hostable FastAPI AI Gateway with an OpenAI-compatible chat API.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python" />
   <img src="https://img.shields.io/badge/FastAPI-Production%20Ready-009688" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/tests-392%20passed-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/API-OpenAI%20Compatible-orange" alt="OpenAI Compatible" />
   <img src="https://img.shields.io/badge/streaming-SSE-ff9800" alt="SSE" />
   <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-411%20passed-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License: Apache-2.0" />
+</p>
+
+<p align="center">
+  <strong>Ship faster.</strong> Route smarter. Stay in control.
 </p>
 
 ---
 
-## Overview
+## Why NestyAI
 
-NestyAI is a **personal-first, self-hostable AI Gateway** focused on developer experience and light, robust local-first deployments.
+NestyAI is a personal-first AI Gateway designed for people who want the power of multi-provider routing, safety controls, and conversation memory without running a heavyweight platform.
 
-### What NestyAI Is:
-- A personal/local-first OpenAI-compatible proxy (`POST /v1/chat/completions`)
-- A deterministic router with automatic failover between Groq, OpenRouter, and NVIDIA
-- A safety-first gatekeeper featuring `InputGuard`, `ContextGuard`, and `OutputGuard`
-- A conversation memory keeper using local SQLite FTS5 for message search and summaries
-- An optional local semantic recall platform using in-DB cosine similarity calculations
+It is optimized for real-world operator constraints:
+- You want OpenAI-compatible APIs without vendor lock-in.
+- You need reliable fallback behavior when providers throttle or fail.
+- You care about safe defaults, observability, and self-hosted control.
 
-### What NestyAI Is Not:
-- An enterprise-scale gateway out of the box (no built-in OAuth/multi-tenancy/billing/dashboard UI)
-- An integration with external high-performance vector databases (keeps all vectors in SQLite)
-- A high-throughput proxy for large teams without custom tuning or database pooling
+In short: NestyAI gives you enterprise-like gateway discipline in a lean, developer-first package.
 
-Users who need enterprise capabilities are encouraged to fork, extend, and adapt the repository to their needs.
+It gives you:
+- OpenAI-compatible `POST /v1/chat/completions`
+- Stable public model aliases (`nesty-flash-1.0`, `nesty-combined-1.0`, `nesty-pro-1.0`)
+- Deterministic provider fallback across Groq, OpenRouter, and NVIDIA
+- Built-in safety guards (input, context, output)
+- Local-first memory stack with SQLite, FTS search, summaries, and optional semantic recall
+- Optional deployment polish for Cloudflare Tunnel and panel environments
 
-Current status: **Phase 10.0 complete — Gateway Core v1 Stabilization.**
-License: Apache-2.0
+If you are building for a team, product prototype, internal tool, or self-hosted AI workflow and want control without unnecessary complexity, this is the sweet spot.
 
 ---
 
-## Core Features
+## At A Glance
 
-- OpenAI-compatible chat API
-- streaming and non-streaming support
-- stable public model aliases:
-  - `nesty-flash-1.0`
-  - `nesty-combined-1.0`
-  - `nesty-pro-1.0`
-- provider fallback routing (Groq/OpenRouter/NVIDIA)
-- InputGuard, OutputGuard, ContextGuard
-- API key auth, rate limit, quota, usage tracking
-- conversation store (SQLite), pagination, export, archive filters
-- conversation summary/compression modes (`auto`, `off`, `force`)
-- SQLite FTS5 message search with fallback to LIKE
-- runtime model config overrides via internal API
-- embedding provider abstraction + optional message embedding
-- semantic recall (optional, local cosine similarity over stored embeddings)
-- memory safety controls (pinned/excluded/tags + recall dedup)
-- provider health diagnostics and benchmark utilities
+| Area | What You Get |
+| --- | --- |
+| API | OpenAI-compatible chat completions + streaming SSE |
+| Routing | Provider chain fallback and model alias abstraction |
+| Safety | InputGuard, ContextGuard, OutputGuard |
+| Auth | API key auth, rate limiting, quota, usage logs |
+| Memory | Conversations, summaries, archive/export, search |
+| Search | SQLite FTS5 search with safe fallback behavior |
+| Embeddings | Optional provider abstraction + local semantic recall |
+| Ops | Diagnostics, health summaries, reliability scoring, doctor checks |
+
+---
+
+## Who This Is For
+
+- Builders shipping internal AI features fast, without standing up a full platform team.
+- Teams that need OpenAI-compatible APIs plus stronger cost/fallback control.
+- Operators running self-hosted AI stacks in Docker, VM, or panel environments.
+- Developers who value stable contracts, predictable behavior, and clear deployment knobs.
+
+---
+
+## Architecture Snapshot
+
+```
+Client / App
+   |
+   v
+NestyAI Gateway (FastAPI)
+   |- InputGuard / ContextGuard / OutputGuard
+   |- Router + model alias mapping
+   |- Tool planner + safe context injection
+   |- API key auth / quota / rate-limit
+   |- Conversation memory + summaries + search (SQLite/FTS)
+   |- Optional embeddings + semantic recall
+   |- Internal diagnostics + health summary
+   |
+   v
+Provider chain (Groq / OpenRouter / NVIDIA) with deterministic fallback
+```
+
+---
+
+## What Happens In Production
+
+1. Requests enter through OpenAI-compatible endpoints.
+2. Safety guards sanitize sensitive or untrusted content.
+3. Router selects alias strategy and provider chain.
+4. Gateway executes with fallback + usage/rate/quota accounting.
+5. Optional memory/recall/diagnostics enrich reliability and operations visibility.
 
 ---
 
@@ -80,14 +117,11 @@ copy .env.example .env
 ```
 
 Set at least one provider key:
-
 - `GROQ_API_KEY`
 - `OPENROUTER_API_KEY`
 - `NVIDIA_API_KEY` (optional)
 
-### 3) Diagnose Setup
-
-Verify that files, environment variables, database connectivity, and FTS5 capabilities are working:
+### 3) Validate Setup
 
 ```bash
 python scripts/doctor.py
@@ -99,21 +133,20 @@ python scripts/doctor.py
 python run.py
 ```
 
-Server:
-
+Gateway URL:
 - `http://127.0.0.1:8000`
 
-Optional Cloudflare Tunnel deployment is supported.
-Docker Compose sidecar and Pterodactyl/container-panel modes are documented.
-For Pterodactyl/container-panel deployments, `python run.py` can start `cloudflared` alongside Gateway when tunnel env vars are enabled.
-Pterodactyl/container-panel users can enable an ephemeral startup Console API key if they cannot run scripts interactively.
-Full details: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+### 5) Optional: Export/OpenAPI Consistency Check
+
+```bash
+python scripts/export_openapi.py --check
+```
 
 ---
 
 ## API Quick Examples
 
-### Non-stream chat
+### Non-stream
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/v1/chat/completions" \
@@ -125,7 +158,7 @@ curl -X POST "http://127.0.0.1:8000/v1/chat/completions" \
   }'
 ```
 
-### Streaming chat
+### Streaming SSE
 
 ```bash
 curl -N -X POST "http://127.0.0.1:8000/v1/chat/completions" \
@@ -140,346 +173,136 @@ curl -N -X POST "http://127.0.0.1:8000/v1/chat/completions" \
 
 ---
 
-## Model Profiles
+## Model Aliases
 
-- `nesty-flash-1.0`: fastest lightweight profile, concise, conservative automation.
-- `nesty-combined-1.0`: balanced default profile for general chat.
-- `nesty-pro-1.0`: highest-quality profile, optional non-streaming multi-model orchestration.
+- `nesty-flash-1.0`: fastest lightweight profile for concise responses.
+- `nesty-combined-1.0`: balanced default profile for most workloads.
+- `nesty-pro-1.0`: highest-quality profile with optional non-stream multi-model orchestration.
 
-Public API remains stable with alias-based model selection. Internal upstream provider/model chains are configurable.
+Public aliases are stable. Provider/model internals can evolve behind these aliases.
 
 ---
 
-## Conversation Memory and Search
+## Deployment Modes
 
-### Conversation capabilities
+### Local / VM / Bare Metal
 
-- store/reuse conversation sessions
-- summary compression
-- controls:
-  - summarize
-  - clear
-  - reset-summary
-  - export
-- pagination and filters
-- ownership access control
-
-### Search capabilities
-
-- conversation search endpoint: `GET /v1/conversations/search`
-- message search backend modes:
-  - `backend=auto` (FTS5 then LIKE fallback)
-  - `backend=fts`
-  - `backend=like`
-- FTS search returns rank/snippet metadata
-
-Rebuild FTS:
-
+Run directly with:
 ```bash
-python scripts/rebuild_fts.py
-python scripts/rebuild_fts.py --db data/nesty.db
+python run.py
 ```
 
----
+### Docker Compose
 
-## Embeddings and Semantic Recall (Optional)
+```bash
+docker compose up --build -d
+```
 
-### Embedding abstraction (Phase 7.1)
+### Cloudflare Tunnel (Optional)
 
-- provider abstraction:
-  - OpenRouter embeddings
-  - NVIDIA embeddings foundation
-  - NoOp provider for deterministic tests
-- embedding records stored in SQLite (`embedding_records`)
-- optional best-effort message embedding after message storage
-
-### Semantic recall (Phase 7.2)
-
-- disabled by default
-- local cosine similarity over stored embeddings (no external vector DB)
-- optional request mode:
-  - `semantic_recall=auto`
-  - `semantic_recall=on`
-  - `semantic_recall=off`
-- recall context is treated as untrusted memory context, not system instruction
-
-Semantic recall requires:
-
-- embeddings enabled
-- stored embeddings available (live traffic or backfill)
-
-### Memory safety and recall controls (Phase 7.3)
-
-- message-level memory controls:
-  - `memory_pinned`: boosts semantic recall ranking slightly
-  - `memory_excluded`: never returned by semantic recall
-  - `memory_tags`: optional safe metadata tags
-- recall safety controls:
-  - pinned boost is capped at score `1.0`
-  - dedup by message id + near-identical normalized content
-  - dedup against recent history and summary-like snippets
-  - max recalled snippets per conversation
-- semantic memory remains contextual-only (never treated as instruction)
-- no raw vectors exposed in public/internal responses
-- no cross-key recall exposure (ownership boundary enforced)
-- excluded-message embeddings can be cleaned via `scripts/cleanup_memory.py`
-
-### Provider health diagnostics (Phase 8.0)
-
-- lightweight provider/model diagnostics with tiny prompt checks
-- diagnostics for model aliases and orchestration roles
-- local SQLite storage of diagnostic results (`provider_health_checks`)
-- internal admin diagnostics endpoints for health listing and check execution
-- benchmark scripts for provider chains and latest health summaries
-- diagnostics are isolated from normal chat:
-  - no tools
-  - no search
-  - no conversation memory
-  - no user conversation payload reuse
-- operational notes:
-  - diagnostics consume normal provider quota
-  - OpenRouter free models may be rate-limited
-  - results can vary by time, region, and provider availability
-
-### Diagnostics polish and health-aware routing (Phase 8.1)
-
-- health summary endpoint and script improvements for ops visibility
-- optional health-aware routing gate for provider chains (disabled by default)
-- freshness and staleness controls:
-  - `PROVIDER_HEALTH_TTL_SECONDS`
-  - `PROVIDER_HEALTH_FAILURE_THRESHOLD`
-  - `PROVIDER_HEALTH_SKIP_STATUSES`
-  - `PROVIDER_HEALTH_ALLOW_STALE_AFTER_SECONDS`
-- fallback behavior:
-  - if all targets are marked unhealthy and strict mode is off, router falls back to normal chain
-  - strict mode can block all skipped targets safely with structured error
-- stream and non-stream flows keep the same API contract; provider health metadata is additive only
-
-### Provider reliability scoring (Phase 8.3)
-
-- Local, passive reliability scoring computed from diagnostic sample history (between `0.0` and `1.0`).
-- No change to runtime provider routing decisions (passive-only metadata in this phase).
-- Integrates weights for:
-  - **Recency**: Recent statuses are decay-weighted higher than older checks.
-  - **Latency**: Mild penalty applied to high-latency successful checks.
-  - **Stability**: Variation analysis of success rates across check windows.
-- Confidence levels:
-  - `insufficient_data`: Fewer than `PROVIDER_RELIABILITY_MIN_CHECKS` checks.
-  - `low`: Min checks to 5 checks.
-  - `medium`: 6 to 10 checks.
-  - `high`: Greater than 10 checks.
-- View scores via CLI summary tool:
-  ```bash
-  python scripts/provider_health_summary.py --show-reliability
-  ```
-- Summary endpoint: Reliability arrays are appended to `/internal/diagnostics/provider-health/summary`.
-
-### API Stability, Compatibility, and SDK Prep (Phase 9.0)
-
-- **Stable Contracts**: Core contracts for completions, models, and conversations frozen and documented in [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
-- **Error Specification**: Standardized error responses detailed in [`docs/ERRORS.md`](docs/ERRORS.md). All gateway responses map standard codes with type indicators.
-- **OpenAPI Schema Exporter**: Export the API schema locally using `python scripts/export_openapi.py`.
-- **Blueprints for SDKs**: SDK preparatory patterns for Python, JS/TS, and Android documented in [`docs/SDK_PREP.md`](docs/SDK_PREP.md).
-
-### Final API Polish and Backward Compatibility Freeze (Phase 9.1)
-
-- **Central version**: `app/version.py` exports `VERSION = "1.0.0"` and `API_VERSION = "v1"`.
-- **Version header**: All responses carry `X-Nesty-API-Version` for easy client detection.
-- **Version fields**: `/health`, `/ready`, and `/` all return `version` and `api_version` fields.
-- **OpenAPI check flag**: `python scripts/export_openapi.py --check` validates docs/openapi.json is up-to-date.
-- **Compatibility contract**: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) documents the stability guarantee and frozen v1 field list.
-- **Contract snapshot tests**: `tests/test_backward_compatibility_freeze.py` asserts all guaranteed fields exist and keep correct types.
-
-### Gateway Core v1 Stabilization (Phase 10.0)
-
-- **Release version**: Bumped `VERSION` from `1.0.0-rc1` to final `1.0.0` release.
-- **OpenAPI Schema Sync**: Regenerated and validated the public API OpenAPI schema definition (`docs/openapi.json`).
-- **Release check**: Verified all setup, doctor, and backward compatibility tests run clean.
+Both are documented in detail at [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md):
+- Docker sidecar mode (`cloudflared` profile)
+- Pterodactyl/container-panel mode (`python run.py` + tunnel env)
 
 ---
 
-These endpoints are **server-to-server internal APIs** and should not be exposed to browsers directly.
+## Panel Console Bootstrap (Optional)
 
-### Internal model config API (Phase 7.0c)
+For panel environments where interactive shell commands are unreliable, Gateway can generate an ephemeral Console API key at startup.
 
-- `GET /internal/model-configs`
-- `GET /internal/model-configs/{model_id}`
-- `PATCH /internal/model-configs/{model_id}`
-- `POST /internal/model-configs/{model_id}/reset`
-- `POST /internal/model-configs/{model_id}/test`
-- `GET /internal/model-configs/audit`
+Enable in `.env`:
 
-### Internal embedding utilities
+```env
+NESTY_EPHEMERAL_CONSOLE_KEY_ENABLED=true
+```
 
-- `POST /internal/embeddings/test`
-- `POST /internal/embeddings/recall-test`
+Flow:
+1. Restart Gateway (`python run.py`).
+2. Copy the startup log banner key (`EPHEMERAL NESTY CONSOLE API KEY`).
+3. Paste into Nesty Console as `NESTY_API_KEY`.
 
-### Internal diagnostics utilities (Phase 8.0)
+Notes:
+- The ephemeral key rotates on every Gateway restart.
+- Previous ephemeral Console keys are revoked automatically.
+- Persistent user-created API keys are not affected.
 
-- `GET /internal/diagnostics/provider-health`
-- `GET /internal/diagnostics/provider-health/latest`
-- `GET /internal/diagnostics/provider-health/summary`
-- `POST /internal/diagnostics/provider-health/check`
-- `POST /internal/diagnostics/provider-model/check`
+---
 
-Protected by:
+## Security Posture
 
+Recommended production baseline:
+
+```env
+APP_ENV=production
+REQUIRE_API_KEY=true
+NESTY_API_KEY_HASH_SECRET=<set-a-strong-secret>
+RATE_LIMIT_ENABLED=true
+SECURITY_HEADERS_ENABLED=true
+CORS_ENABLED=true
+CORS_ALLOW_ORIGINS=https://your-app.example.com
+TRUSTED_HOSTS=your-api.example.com
+INTERNAL_ADMIN_ENABLED=false
+SAFE_DEBUG_AUTH=false
+```
+
+Always:
+- Never commit `.env` or runtime secrets.
+- Never commit `data/nesty.db`.
+- Never expose `NESTY_INTERNAL_ADMIN_TOKEN` to browser/mobile clients.
+
+---
+
+## Internal Admin APIs
+
+Internal endpoints are server-to-server only and token-protected:
+- `/internal/model-configs/*`
+- `/internal/embeddings/*`
+- `/internal/diagnostics/*`
+
+Guarded by:
 - `INTERNAL_ADMIN_ENABLED`
 - `NESTY_INTERNAL_ADMIN_TOKEN`
 
 ---
 
-## Production Checklist
+## Memory, Search, and Semantic Recall
 
-Recommended baseline:
+### Conversation Features
+- Store/reuse sessions
+- Summarization (`auto`, `off`, `force`)
+- Export, archive filters, clear/reset controls
+- Ownership-safe retrieval
 
-```bash
-APP_ENV=production
-REQUIRE_API_KEY=true
-NESTY_API_KEY_HASH_SECRET=replace_with_a_strong_secret
-RATE_LIMIT_ENABLED=true
-SECURITY_HEADERS_ENABLED=true
-TRUSTED_HOSTS=your-api.example.com
-CORS_ENABLED=true
-CORS_ALLOW_ORIGINS=https://your-app.example.com
-SAFE_DEBUG_AUTH=false
-INTERNAL_ADMIN_ENABLED=false
-```
+### Search
+- `GET /v1/conversations/search`
+- Backend modes: `auto`, `fts`, `like`
+- FTS5-first with fallback behavior
 
-Also:
-
-- never commit `.env`
-- never commit `data/nesty.db`
-- avoid wildcard CORS in production
-- do not expose internal admin token to client/browser code
+### Optional Semantic Recall
+- Local cosine similarity over stored embeddings
+- No external vector DB required
+- Safe contextual memory usage (never treated as system instruction)
 
 ---
 
-## Environment Variables (Major Groups)
+## Operations Toolkit
 
-### Core and providers
-
-- `APP_NAME`, `APP_VERSION`, `APP_ENV`
-- `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `NVIDIA_API_KEY`
-- `NVIDIA_BASE_URL`
-
-### Security and quota
-
-- `REQUIRE_API_KEY`
-- `NESTY_API_KEY_HASH_SECRET`
-- `RATE_LIMIT_ENABLED`, `RATE_LIMIT_REQUESTS_PER_MINUTE`
-- CORS/trusted-host/body-size/security-header settings
-
-### Conversation memory
-
-- `CONVERSATION_HISTORY_*`
-- `CONVERSATION_SUMMARY_*`
-
-### Nesty Pro orchestration
-
-- `NESTY_PRO_ORCHESTRATION_ENABLED`
-- `NESTY_PRO_ORCHESTRATION_MAX_INTERNAL_CALLS`
-- `NESTY_PRO_ORCHESTRATION_COMPLEXITY_MIN_SCORE`
-- `NESTY_PRO_ORCHESTRATION_ROLE_TIMEOUT_SECONDS`
-- `NESTY_PRO_ORCHESTRATION_INCLUDE_ROLE_LATENCY`
-
-### Embeddings
-
-- `EMBEDDINGS_ENABLED`
-- `EMBEDDINGS_PROVIDER`
-- `EMBEDDINGS_MODEL`
-- `EMBEDDINGS_DIMENSIONS`
-- `EMBEDDINGS_TIMEOUT_SECONDS`
-- `EMBEDDINGS_MAX_INPUT_CHARS`
-- `EMBEDDINGS_STORE_MESSAGE_EMBEDDINGS`
-- `EMBEDDINGS_BACKFILL_BATCH_SIZE`
-
-### Semantic recall
-
-- `SEMANTIC_RECALL_ENABLED`
-- `SEMANTIC_RECALL_TOP_K`
-- `SEMANTIC_RECALL_MIN_SCORE`
-- `SEMANTIC_RECALL_MAX_CONTEXT_CHARS`
-- `SEMANTIC_RECALL_SCOPE`
-- `SEMANTIC_RECALL_INCLUDE_ROLES`
-- `SEMANTIC_RECALL_EXCLUDE_CURRENT_CONVERSATION_RECENT`
-- `SEMANTIC_RECALL_CANDIDATE_LIMIT`
-- `SEMANTIC_RECALL_PINNED_BOOST`
-- `SEMANTIC_RECALL_DEDUP_SIMILARITY`
-- `SEMANTIC_RECALL_MAX_PER_CONVERSATION`
-- `SEMANTIC_RECALL_EXCLUDE_MEMORY_EXCLUDED`
-
-### Diagnostics
-
-- `DIAGNOSTICS_ENABLED`
-- `DIAGNOSTICS_DEFAULT_TIMEOUT_SECONDS`
-- `DIAGNOSTICS_TEST_MAX_TOKENS`
-- `DIAGNOSTICS_SAVE_RESULTS`
-- `DIAGNOSTICS_OUTPUT_PREVIEW_CHARS`
-
-### Health-aware routing
-
-- `PROVIDER_HEALTH_AWARE_ROUTING`
-- `PROVIDER_HEALTH_STRICT_MODE`
-- `PROVIDER_HEALTH_TTL_SECONDS`
-- `PROVIDER_HEALTH_FAILURE_THRESHOLD`
-- `PROVIDER_HEALTH_SKIP_STATUSES`
-- `PROVIDER_HEALTH_ALLOW_STALE_AFTER_SECONDS`
-
-See [`.env.example`](.env.example) for full list.
-
----
-
-## Scripts
-
+Useful scripts:
+- `python scripts/doctor.py`
+- `python scripts/export_openapi.py --check`
+- `python scripts/create_api_key.py --name <name>`
+- `python scripts/list_api_keys.py`
+- `python scripts/revoke_api_key.py --id <id>`
+- `python scripts/provider_health_summary.py --show-reliability`
+- `python scripts/benchmark_provider_chains.py --include-roles`
 - `python scripts/rebuild_fts.py`
 - `python scripts/rebuild_embeddings.py`
-- `python scripts/test_embedding_provider.py`
-- `python scripts/test_semantic_recall.py --text "What did I say earlier?"`
-- `python scripts/evaluate_semantic_recall.py --query "What did I say earlier?" --show-content-preview`
-- `python scripts/cleanup_memory.py --delete-embeddings-for-excluded`
-- `python scripts/benchmark_provider_chains.py --include-roles`
-- `python scripts/benchmark_provider_chains.py --include-roles --only-unhealthy`
-- `python scripts/provider_health_summary.py --limit 50 --since-seconds 3600`
-- `python scripts/export_openapi.py` (exports OpenAPI schema JSON)
-
-Scheduler examples (manual ops wiring, no built-in scheduler):
-
-- Windows Task Scheduler:
-  - `python scripts/benchmark_provider_chains.py --include-roles`
-- Linux cron:
-  - `*/30 * * * * cd /path/to/nesty-ai && .venv/bin/python scripts/benchmark_provider_chains.py --include-roles`
-- Docker Compose:
-  - `docker compose exec nesty-ai python scripts/benchmark_provider_chains.py --include-roles`
-
-Operational warning:
-
-- diagnostics consume provider quota
-- keep diagnostic intervals conservative
-- free-tier providers may rate-limit or throttle
-- health-aware routing is optional and disabled by default
-
----
-
-## Memory Controls API Examples
-
-```bash
-curl -X PATCH "http://127.0.0.1:8000/v1/conversations/<conversation_id>/messages/<message_id>/memory" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "pinned": true,
-    "excluded": false,
-    "tags": ["project", "important"]
-  }'
-```
-
-```bash
-curl "http://127.0.0.1:8000/v1/conversations/memory-controls?pinned=true&limit=20&offset=0"
-```
 
 ---
 
 ## API Surface
+
+Public:
 - `GET /health`
 - `GET /ready`
 - `GET /v1/models`
@@ -495,57 +318,51 @@ curl "http://127.0.0.1:8000/v1/conversations/memory-controls?pinned=true&limit=2
 - `POST /v1/conversations/{conversation_id}/reset-summary`
 - `GET /v1/conversations/{conversation_id}/export`
 
-### Internal (admin token required)
-
-- model-config endpoints under `/internal/model-configs/*`
-- embedding utility endpoints under `/internal/embeddings/*`
-- diagnostics endpoints under `/internal/diagnostics/*`
-
 ---
 
-## Quality Status
+## Quality Snapshot
 
-- test suite: **392 passed**
-- streaming SSE contract: enabled
+- Full suite local snapshot: **411 passed**
+- Streaming SSE contract: enabled
 - FTS fallback behavior: enabled
-- semantic recall: optional, disabled by default
-- provider diagnostics: optional and internal-admin-only
+- Semantic recall: optional, disabled by default
+- Diagnostics: optional, internal-admin-only
 
 ---
 
-## Scope Notes
+## Scope Boundaries
 
-- no external vector DB in current phase
-- no dashboard/admin UI in backend repo
-- no billing/OAuth
-- no semantic recall injection if feature disabled
-- chat provider chains remain separate from embedding config
+NestyAI is intentionally focused:
+- No built-in dashboard/admin UI in this backend repo
+- No OAuth/billing/multi-tenant workspace platform by default
+- No external vector DB dependency in core architecture
+
+Enterprise teams can fork and extend these areas as needed.
 
 ---
 
-## Docs
+## Documentation Map
 
-- Technical notes: [`docs/README_TECHNICAL.md`](docs/README_TECHNICAL.md)
 - Deployment guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+- Technical notes: [`docs/README_TECHNICAL.md`](docs/README_TECHNICAL.md)
+- API contract: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)
+- Error contract: [`docs/ERRORS.md`](docs/ERRORS.md)
+- Compatibility policy: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
 - Release checklist: [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md)
-- API contract specs: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)
-- Standard error spec: [`docs/ERRORS.md`](docs/ERRORS.md)
-- SDK preparation blueprints: [`docs/SDK_PREP.md`](docs/SDK_PREP.md)
-- Compatibility contract: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
-- Examples: [`examples/`](examples)
+- SDK prep notes: [`docs/SDK_PREP.md`](docs/SDK_PREP.md)
+- OpenAPI snapshot: [`docs/openapi.json`](docs/openapi.json)
+- Usage examples: [`examples/`](examples)
 
 ---
 
 ## License
 
-NestyAI Gateway is licensed under the Apache License 2.0.
-
-This is a personal-first, self-hostable AI Gateway project. You may use, fork, modify, and extend it under the terms of the Apache-2.0 license. Enterprise-grade features such as multi-tenant workspaces, billing, advanced RBAC, OAuth, distributed infrastructure, or compliance workflows are intentionally outside the default project scope and may be implemented by forks.
+NestyAI Gateway is licensed under Apache 2.0.
 
 See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
 
 ---
 
-## Next Phase
+## Roadmap Direction
 
-Recommended next target: **Production monitoring, Observability metrics, and alerting hooks.**
+Production monitoring, observability metrics, and alerting hooks.
