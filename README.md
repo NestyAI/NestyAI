@@ -14,6 +14,7 @@
   <img src="https://img.shields.io/badge/API-OpenAI%20Compatible-orange" alt="OpenAI Compatible" />
   <img src="https://img.shields.io/badge/streaming-SSE-ff9800" alt="SSE" />
   <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License: Apache-2.0" />
 </p>
 
 ---
@@ -37,6 +38,7 @@ NestyAI is a **personal-first, self-hostable AI Gateway** focused on developer e
 Users who need enterprise capabilities are encouraged to fork, extend, and adapt the repository to their needs.
 
 Current status: **Phase 10.0 complete — Gateway Core v1 Stabilization.**
+License: Apache-2.0
 
 ---
 
@@ -525,6 +527,16 @@ curl "http://127.0.0.1:8000/v1/conversations/memory-controls?pinned=true&limit=2
 - SDK preparation blueprints: [`docs/SDK_PREP.md`](docs/SDK_PREP.md)
 - Compatibility contract: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
 - Examples: [`examples/`](examples)
+
+---
+
+## License
+
+NestyAI Gateway is licensed under the Apache License 2.0.
+
+This is a personal-first, self-hostable AI Gateway project. You may use, fork, modify, and extend it under the terms of the Apache-2.0 license. Enterprise-grade features such as multi-tenant workspaces, billing, advanced RBAC, OAuth, distributed infrastructure, or compliance workflows are intentionally outside the default project scope and may be implemented by forks.
+
+See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
 
 ---
 
