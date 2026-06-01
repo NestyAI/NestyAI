@@ -121,8 +121,13 @@ async def test_nesty_pro_orchestration_falls_back_to_single_model() -> None:
     assert response.orchestration.requested == "force"
     assert response.orchestration.used is False
     assert response.orchestration.fallback_used is True
-    assert response.orchestration.mode == "single"
+    assert response.orchestration.mode == "fallback"
     assert response.orchestration.decision_reason == "request_force"
     assert response.orchestration.reason == "fallback_to_single_model"
+    assert response.orchestration.completed_roles == []
+    assert response.orchestration.failed_roles == ["planner"]
+    assert response.orchestration.skipped_roles == ["researcher", "critic", "finalizer"]
+    assert response.orchestration.fallback_reason == "orchestration_error"
+    assert response.orchestration.total_latency_ms is not None
     assert router.generate_calls >= 1
     assert router.route_chat_calls == 1

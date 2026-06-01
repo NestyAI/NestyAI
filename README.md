@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <img src="public/NestyAI_Full.svg" alt="NestyAI" width="560" />
 </p>
 
@@ -12,8 +12,8 @@
   <img src="https://img.shields.io/badge/FastAPI-Production%20Ready-009688" alt="FastAPI" />
   <img src="https://img.shields.io/badge/API-OpenAI%20Compatible-orange" alt="OpenAI Compatible" />
   <img src="https://img.shields.io/badge/streaming-SSE-ff9800" alt="SSE" />
-  <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-411%20passed-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/version-1.0.4-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-413%20passed-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License: Apache-2.0" />
 </p>
 

@@ -57,6 +57,7 @@ Changes that are **always allowed** without a version bump:
 |-------|-------|
 | `model_alias` | Human-friendly alias used to select this model |
 | `system_fingerprint` | Optional fingerprint |
+| `orchestration` | Optional multi-model orchestration metadata (additive since v1.0.4) |
 
 ### Models
 

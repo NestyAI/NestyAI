@@ -7,6 +7,17 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.0.4] - 2026-06-01
+
+### Added
+- Added safe, structured metadata fields to `OrchestrationInfo` response: `completed_roles`, `failed_roles`, `skipped_roles`, `fallback_reason`, `streaming_fallback`, and `total_latency_ms`.
+- Enabled the Pydantic schema to accept both string and boolean representation for `orchestration.requested` to maintain maximum client compatibility.
+- Implemented consistent orchestration `mode` categorisation: `"off"`, `"single"`, `"reduced"`, `"full"`, `"fallback"`, or `"unknown"`.
+- Improved multi-model orchestrator execution tracking to capture per-role latencies and completed vs failed execution states during error recovery.
+
+### Security
+- Enforced strict output sanitisation on response metadata to guarantee that no internal prompts, role system instructions, provider secrets, API keys, or raw exception stack traces/tracebacks are exposed to clients.
+
 ## [1.0.2] - Unreleased
 
 ### Added

@@ -13,6 +13,8 @@ def test_models_list_shape_and_ids(monkeypatch) -> None:
         require_api_key=False,
     )
     monkeypatch.setattr("app.deps.get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.models.get_settings", lambda: settings)
+    monkeypatch.setattr("app.security.auth.get_settings", lambda: settings)
 
     app = create_app(settings)
     client = TestClient(app)
@@ -47,6 +49,7 @@ def test_internal_endpoints_hidden_when_admin_disabled(monkeypatch) -> None:
         nesty_internal_admin_token="",
     )
     monkeypatch.setattr("app.deps.get_settings", lambda: settings)
+    monkeypatch.setattr("app.security.internal_auth.get_settings", lambda: settings)
 
     app = create_app(settings)
     client = TestClient(app)

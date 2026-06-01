@@ -9,7 +9,7 @@ from app.config import ModelProfile, ModelsConfig, Settings
 from app.core.errors import APIError
 from app.core.model_config_loader import get_effective_model_config
 from app.core.model_behavior import apply_behavior_defaults, build_behavior_system_instruction
-from app.core.multi_model_orchestrator import NestyProMultiModelOrchestrator, should_use_orchestration
+from app.core.multi_model_orchestrator import NestyProMultiModelOrchestrator, should_use_orchestration, MultiModelOrchestrationError
 from app.core.prompt_builder import (
     append_behavior_instruction,
     append_external_context,
@@ -150,6 +150,7 @@ class ChatOrchestrator:
             provider_health_info: ProviderHealthInfo | None = None
 
             if decision.get("should_use"):
+                start_orch = time.perf_counter()
                 try:
                     synthesis = await self.multi_model_orchestrator.run(
                         request_id=request_id,
@@ -165,6 +166,7 @@ class ChatOrchestrator:
                         include_role_latency=self.settings.nesty_pro_orchestration_include_role_latency,
                         context_metadata=context_metadata,
                     )
+                    orch_elapsed = int((time.perf_counter() - start_orch) * 1000)
                     response_text = synthesis.content
                     provider_used = synthesis.provider
                     usage = Usage(
@@ -172,33 +174,81 @@ class ChatOrchestrator:
                         completion_tokens=synthesis.usage.completion_tokens,
                         total_tokens=synthesis.usage.total_tokens,
                     )
+                    all_possible_roles = ["planner", "researcher", "critic", "finalizer"]
+                    is_full = all(r in synthesis.roles for r in all_possible_roles)
+                    mode_val = "full" if is_full else "reduced"
+                    skipped_roles = [r for r in all_possible_roles if r not in synthesis.roles]
+                    
                     orchestration = OrchestrationInfo(
                         enabled=bool(decision.get("enabled")),
                         requested=str(decision.get("requested") or request.orchestration),
                         used=True,
-                        mode="multi_model_synthesis",
+                        mode=mode_val,
                         decision_reason=str(decision.get("reason") or "complex_request"),
                         complexity_score=int(decision.get("complexity_score") or 0),
                         roles=synthesis.roles,
+                        completed_roles=synthesis.roles,
+                        failed_roles=[],
+                        skipped_roles=skipped_roles,
                         fallback_used=False,
+                        fallback_reason=None,
+                        streaming_fallback=False,
                         internal_calls=synthesis.internal_calls,
                         role_latency_ms=synthesis.role_latency_ms or None,
+                        total_latency_ms=orch_elapsed,
                         reason=None,
                     )
-                except Exception:
+                    orchestration = self._sanitize_orchestration_metadata(orchestration)
+                except MultiModelOrchestrationError as exc:
+                    orch_elapsed = int((time.perf_counter() - start_orch) * 1000)
+                    all_possible_roles = ["planner", "researcher", "critic", "finalizer"]
+                    failed_roles = [exc.failed_role] if exc.failed_role else []
+                    completed_roles = exc.completed_roles
+                    skipped_roles = [r for r in all_possible_roles if r not in completed_roles and r not in failed_roles]
+                    
                     orchestration = OrchestrationInfo(
                         enabled=bool(decision.get("enabled")),
                         requested=str(decision.get("requested") or request.orchestration),
                         used=False,
-                        mode="single",
+                        mode="fallback",
                         decision_reason=str(decision.get("reason") or "complex_request"),
                         complexity_score=int(decision.get("complexity_score") or 0),
                         roles=list(decision.get("roles") or []),
+                        completed_roles=completed_roles,
+                        failed_roles=failed_roles,
+                        skipped_roles=skipped_roles,
                         fallback_used=True,
-                        internal_calls=0,
-                        role_latency_ms=None,
+                        fallback_reason=exc.fallback_reason,
+                        streaming_fallback=False,
+                        internal_calls=len(completed_roles),
+                        role_latency_ms=exc.role_latency_ms or None,
+                        total_latency_ms=orch_elapsed,
                         reason="fallback_to_single_model",
                     )
+                    orchestration = self._sanitize_orchestration_metadata(orchestration)
+                except Exception:
+                    orch_elapsed = int((time.perf_counter() - start_orch) * 1000)
+                    all_possible_roles = ["planner", "researcher", "critic", "finalizer"]
+                    orchestration = OrchestrationInfo(
+                        enabled=bool(decision.get("enabled")),
+                        requested=str(decision.get("requested") or request.orchestration),
+                        used=False,
+                        mode="fallback",
+                        decision_reason=str(decision.get("reason") or "complex_request"),
+                        complexity_score=int(decision.get("complexity_score") or 0),
+                        roles=list(decision.get("roles") or []),
+                        completed_roles=[],
+                        failed_roles=[],
+                        skipped_roles=all_possible_roles,
+                        fallback_used=True,
+                        fallback_reason="orchestration_error",
+                        streaming_fallback=False,
+                        internal_calls=0,
+                        role_latency_ms=None,
+                        total_latency_ms=orch_elapsed,
+                        reason="fallback_to_single_model",
+                    )
+                    orchestration = self._sanitize_orchestration_metadata(orchestration)
 
             if not response_text:
                 route_result = await self.router.route_chat(
@@ -996,18 +1046,128 @@ class ChatOrchestrator:
     def _orchestration_info_from_decision(decision: dict[str, Any]) -> OrchestrationInfo:
         reason = str(decision.get("reason") or "")
         requested = str(decision.get("requested") or "auto")
-        return OrchestrationInfo(
-            enabled=bool(decision.get("enabled")),
+        enabled = bool(decision.get("enabled"))
+        complexity_score = int(decision.get("complexity_score") or 0)
+        
+        used = False
+        mode_val = "single"
+        fallback_used = False
+        fallback_reason = None
+        streaming_fallback = False
+        
+        if reason == "streaming_not_supported":
+            mode_val = "single"
+            fallback_used = True
+            fallback_reason = "streaming_fallback"
+            streaming_fallback = True
+        elif reason == "request_off":
+            mode_val = "off"
+        elif reason in ("global_disabled", "config_disabled"):
+            mode_val = "off"
+            if requested != "off":
+                fallback_used = True
+                fallback_reason = "orchestration_disabled"
+        elif reason == "simple_request":
+            mode_val = "single"
+            
+        all_roles = ["planner", "researcher", "critic", "finalizer"]
+        skipped = [r for r in all_roles] if requested != "off" else []
+        
+        info = OrchestrationInfo(
+            enabled=enabled,
             requested=requested,
-            used=False,
-            mode=str(decision.get("mode") or "single"),
+            used=used,
+            mode=mode_val,
             decision_reason=reason or None,
-            complexity_score=int(decision.get("complexity_score") or 0),
-            roles=list(decision.get("roles") or []),
-            fallback_used=False,
+            complexity_score=complexity_score,
+            roles=[],
+            completed_roles=[],
+            failed_roles=[],
+            skipped_roles=skipped,
+            fallback_used=fallback_used,
+            fallback_reason=fallback_reason,
+            streaming_fallback=streaming_fallback,
             internal_calls=0,
             role_latency_ms=None,
+            total_latency_ms=None,
             reason=reason or None,
+        )
+        return ChatOrchestrator._sanitize_orchestration_metadata(info)
+
+    @staticmethod
+    def _sanitize_orchestration_metadata(info: OrchestrationInfo) -> OrchestrationInfo:
+        allowed_roles = {"planner", "researcher", "critic", "finalizer"}
+        
+        roles = [r for r in info.roles if r in allowed_roles]
+        completed_roles = [r for r in info.completed_roles if r in allowed_roles]
+        failed_roles = [r for r in info.failed_roles if r in allowed_roles]
+        skipped_roles = [r for r in info.skipped_roles if r in allowed_roles]
+        
+        role_latency_ms = None
+        if info.role_latency_ms is not None:
+            role_latency_ms = {
+                k: max(0, int(v))
+                for k, v in info.role_latency_ms.items()
+                if k in allowed_roles
+            }
+            
+        total_latency_ms = None
+        if info.total_latency_ms is not None:
+            total_latency_ms = max(0, int(info.total_latency_ms))
+            
+        allowed_fallback_reasons = {
+            "role_timeout",
+            "provider_unavailable",
+            "internal_call_limit",
+            "orchestration_error",
+            "streaming_fallback",
+            "orchestration_disabled",
+        }
+        fallback_reason = info.fallback_reason
+        if fallback_reason is not None and fallback_reason not in allowed_fallback_reasons:
+            fallback_reason = "orchestration_error"
+            
+        allowed_modes = {"off", "single", "reduced", "full", "fallback", "unknown"}
+        mode = info.mode if info.mode in allowed_modes else "unknown"
+        
+        decision_reason = info.decision_reason
+        safe_decision_reasons = {
+            "not_pro_model",
+            "global_disabled",
+            "config_disabled",
+            "streaming_not_supported",
+            "internal_call_limit_too_low",
+            "missing_roles",
+            "request_off",
+            "simple_request",
+            "request_force",
+            "complex_request",
+        }
+        if decision_reason not in safe_decision_reasons:
+            if decision_reason:
+                if len(decision_reason) > 60 or "\n" in decision_reason or "traceback" in decision_reason.lower():
+                    decision_reason = "orchestration_error"
+            else:
+                decision_reason = None
+
+        return OrchestrationInfo(
+            enabled=bool(info.enabled),
+            requested=info.requested,
+            used=bool(info.used),
+            mode=mode,
+            decision_reason=decision_reason,
+            complexity_score=int(info.complexity_score or 0),
+            roles=roles,
+            completed_roles=completed_roles,
+            failed_roles=failed_roles,
+            skipped_roles=skipped_roles,
+            fallback_used=bool(info.fallback_used),
+            fallback_reason=fallback_reason,
+            streaming_fallback=bool(info.streaming_fallback),
+            internal_calls=int(info.internal_calls or 0),
+            role_latency_ms=role_latency_ms,
+            total_latency_ms=total_latency_ms,
+            reason=info.reason,
         )
 
     @staticmethod

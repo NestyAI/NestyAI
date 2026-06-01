@@ -2253,7 +2253,14 @@
             "default": false
           },
           "requested": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              }
+            ],
             "title": "Requested",
             "default": "auto"
           },
@@ -2324,6 +2331,54 @@
               }
             ],
             "title": "Reason"
+          },
+          "completed_roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Completed Roles"
+          },
+          "failed_roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Failed Roles"
+          },
+          "skipped_roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skipped Roles"
+          },
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Reason"
+          },
+          "streaming_fallback": {
+            "type": "boolean",
+            "title": "Streaming Fallback",
+            "default": false
+          },
+          "total_latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Latency Ms"
           }
         },
         "type": "object",

@@ -71,7 +71,19 @@ class MultiModelSynthesisResult:
 
 
 class MultiModelOrchestrationError(Exception):
-    pass
+    def __init__(
+        self,
+        message: str,
+        completed_roles: list[str] | None = None,
+        failed_role: str | None = None,
+        fallback_reason: str | None = None,
+        role_latency_ms: dict[str, int] | None = None,
+    ):
+        super().__init__(message)
+        self.completed_roles = completed_roles or []
+        self.failed_role = failed_role
+        self.fallback_reason = fallback_reason or "orchestration_error"
+        self.role_latency_ms = role_latency_ms or {}
 
 
 def should_use_orchestration(
@@ -305,16 +317,46 @@ class NestyProMultiModelOrchestrator:
                     timeout=max(1.0, float(role_timeout_seconds)),
                 )
             except TimeoutError as exc:
-                raise MultiModelOrchestrationError("role_timeout") from exc
+                latency = int((time.perf_counter() - start) * 1000)
+                if include_role_latency:
+                    role_latency_ms[role] = latency
+                raise MultiModelOrchestrationError(
+                    "role_timeout",
+                    completed_roles=list(outputs.keys()),
+                    failed_role=role,
+                    fallback_reason="role_timeout",
+                    role_latency_ms=role_latency_ms,
+                ) from exc
             except Exception as exc:
-                raise MultiModelOrchestrationError("role_failed") from exc
+                latency = int((time.perf_counter() - start) * 1000)
+                if include_role_latency:
+                    role_latency_ms[role] = latency
+                reason = "orchestration_error"
+                exc_name = type(exc).__name__.lower()
+                exc_msg = str(exc).lower()
+                if "unavailable" in exc_msg or "connection" in exc_msg or "timeout" in exc_name:
+                    reason = "provider_unavailable"
+                raise MultiModelOrchestrationError(
+                    "role_failed",
+                    completed_roles=list(outputs.keys()),
+                    failed_role=role,
+                    fallback_reason=reason,
+                    role_latency_ms=role_latency_ms,
+                ) from exc
+
             latency = int((time.perf_counter() - start) * 1000)
             if include_role_latency:
                 role_latency_ms[role] = latency
 
             content = (route.provider_result.content or "").strip()
             if not content:
-                raise MultiModelOrchestrationError("empty_role_output")
+                raise MultiModelOrchestrationError(
+                    "empty_role_output",
+                    completed_roles=list(outputs.keys()),
+                    failed_role=role,
+                    fallback_reason="orchestration_error",
+                    role_latency_ms=role_latency_ms,
+                )
             outputs[role] = content
             provider_used = route.provider_used
             total_usage.prompt_tokens += int(route.provider_result.usage.prompt_tokens or 0)
@@ -324,7 +366,13 @@ class NestyProMultiModelOrchestrator:
         final_role = selected_roles[-1]
         final_content = outputs.get(final_role, "").strip()
         if not final_content:
-            raise MultiModelOrchestrationError("empty_final_output")
+            raise MultiModelOrchestrationError(
+                "empty_final_output",
+                completed_roles=list(outputs.keys()),
+                failed_role=None,
+                fallback_reason="orchestration_error",
+                role_latency_ms=role_latency_ms,
+            )
         return MultiModelSynthesisResult(
             content=final_content,
             provider=provider_used,

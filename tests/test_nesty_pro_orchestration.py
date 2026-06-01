@@ -139,11 +139,18 @@ async def test_nesty_pro_non_stream_uses_multi_model_orchestration() -> None:
     assert response.orchestration is not None
     assert response.orchestration.enabled is True
     assert response.orchestration.used is True
-    assert response.orchestration.mode == "multi_model_synthesis"
+    assert response.orchestration.mode == "full"
     assert response.orchestration.requested == "auto"
     assert response.orchestration.decision_reason == "complex_request"
     assert response.orchestration.internal_calls == 4
     assert response.orchestration.roles == ["planner", "researcher", "critic", "finalizer"]
+    assert response.orchestration.completed_roles == ["planner", "researcher", "critic", "finalizer"]
+    assert response.orchestration.failed_roles == []
+    assert response.orchestration.skipped_roles == []
+    assert response.orchestration.fallback_used is False
+    assert response.orchestration.fallback_reason is None
+    assert response.orchestration.streaming_fallback is False
+    assert response.orchestration.total_latency_ms is not None
     assert response.provider == "internal"
     assert router.route_chat_calls == 0
     assert len(router.generate_calls) == 4
@@ -164,5 +171,9 @@ async def test_nesty_pro_stream_does_not_use_multi_model_orchestration() -> None
     assert handle.outcome.orchestration.enabled is True
     assert handle.outcome.orchestration.requested == "auto"
     assert handle.outcome.orchestration.used is False
-    assert handle.outcome.orchestration.mode == "single_stream"
+    assert handle.outcome.orchestration.mode == "single"
     assert handle.outcome.orchestration.decision_reason == "streaming_not_supported"
+    assert handle.outcome.orchestration.streaming_fallback is True
+    assert handle.outcome.orchestration.fallback_used is True
+    assert handle.outcome.orchestration.fallback_reason == "streaming_fallback"
+    assert handle.outcome.orchestration.skipped_roles == ["planner", "researcher", "critic", "finalizer"]

@@ -65,7 +65,7 @@ class ConversationInfo(BaseModel):
 
 class OrchestrationInfo(BaseModel):
     enabled: bool = False
-    requested: str = "auto"
+    requested: bool | str = "auto"
     used: bool = False
     mode: str = "single"
     decision_reason: str | None = None
@@ -75,6 +75,12 @@ class OrchestrationInfo(BaseModel):
     internal_calls: int = 0
     role_latency_ms: dict[str, int] | None = None
     reason: str | None = None
+    completed_roles: list[str] = Field(default_factory=list)
+    failed_roles: list[str] = Field(default_factory=list)
+    skipped_roles: list[str] = Field(default_factory=list)
+    fallback_reason: str | None = None
+    streaming_fallback: bool = False
+    total_latency_ms: int | None = None
 
 
 class SemanticRecallInfo(BaseModel):
