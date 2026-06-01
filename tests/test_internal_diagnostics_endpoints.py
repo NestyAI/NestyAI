@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.storage.db import init_db
+from app.storage.provider_health import record_provider_health_check
 
 
 def test_internal_diagnostics_hidden_when_admin_disabled(client, monkeypatch, tmp_path) -> None:
@@ -135,3 +136,39 @@ def test_internal_provider_health_check_all_aliases(client, monkeypatch, tmp_pat
     assert response.status_code == 200
     assert response.json()["ok"] is True
     assert captured.get("called") is True
+
+
+def test_internal_provider_health_cleanup_endpoint(client, monkeypatch, tmp_path) -> None:
+    db_path = str(tmp_path / "internal_diag_cleanup.db")
+    init_db(db_path)
+    monkeypatch.setattr(
+        "app.security.internal_auth.get_settings",
+        lambda: type("S", (), {"internal_admin_enabled": True, "nesty_internal_admin_token": "abc"})(),
+    )
+    monkeypatch.setattr(
+        "app.api.internal_diagnostics.get_settings",
+        lambda: type("S", (), {"diagnostics_enabled": True})(),
+    )
+    monkeypatch.setattr(
+        "app.storage.provider_health.get_settings",
+        lambda: type("S", (), {"nesty_db_path": db_path})(),
+    )
+
+    record_provider_health_check(
+        provider="openrouter",
+        model="m1",
+        model_alias="nesty-combined-1.0",
+        role="main",
+        status="failed",
+        db_path=db_path,
+    )
+
+    response = client.delete(
+        "/internal/diagnostics/provider-health",
+        headers={"Authorization": "Bearer abc"},
+        params={"provider": "openrouter"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["deleted"] == 1
+    assert payload["filters"]["provider"] == "openrouter"

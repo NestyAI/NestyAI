@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.config import ModelProfile, ModelsConfig, Settings
+from app.core.internal_tool_markup import sanitize_internal_tool_markup
 from app.core.errors import APIError
 from app.core.model_config_loader import get_effective_model_config
 from app.core.model_behavior import apply_behavior_defaults, build_behavior_system_instruction
@@ -30,6 +31,7 @@ from app.schemas.chat import (
     ConversationInfo,
     GuardInfo,
     OrchestrationInfo,
+    OutputSafetyInfo,
     ProviderHealthInfo,
     SemanticRecallInfo,
     Usage,
@@ -62,6 +64,7 @@ class StreamOutcome:
     orchestration: OrchestrationInfo = field(default_factory=OrchestrationInfo)
     semantic_recall: SemanticRecallInfo = field(default_factory=SemanticRecallInfo)
     provider_health: ProviderHealthInfo | None = None
+    output_safety: OutputSafetyInfo = field(default_factory=OutputSafetyInfo)
 
 
 @dataclass
@@ -148,6 +151,7 @@ class ChatOrchestrator:
             provider_used = ""
             usage = Usage()
             provider_health_info: ProviderHealthInfo | None = None
+            orchestration_markup_removed = False
 
             if decision.get("should_use"):
                 start_orch = time.perf_counter()
@@ -174,6 +178,7 @@ class ChatOrchestrator:
                         completion_tokens=synthesis.usage.completion_tokens,
                         total_tokens=synthesis.usage.total_tokens,
                     )
+                    orchestration_markup_removed = bool(getattr(synthesis, "internal_tool_markup_removed", False))
                     all_possible_roles = ["planner", "researcher", "critic", "finalizer"]
                     is_full = all(r in synthesis.roles for r in all_possible_roles)
                     mode_val = "full" if is_full else "reduced"
@@ -270,6 +275,10 @@ class ChatOrchestrator:
                 )
 
             output_guard_info = GuardInfo()
+            response_text, output_safety = self._sanitize_internal_tool_markup_response(response_text)
+            if orchestration_markup_removed:
+                output_safety.internal_tool_markup_detected = True
+                output_safety.internal_tool_markup_removed = True
             if self.enable_output_guard:
                 response_text, output_guard_info = self.output_guard.scan_text(response_text)
 
@@ -305,6 +314,7 @@ class ChatOrchestrator:
                 orchestration=orchestration,
                 semantic_recall=semantic_recall,
                 provider_health=provider_health_info,
+                output_safety=output_safety,
                 model_alias=request.model,
             )
         except APIError as exc:
@@ -447,7 +457,9 @@ class ChatOrchestrator:
                 return
 
             if self.enable_output_guard:
-                sanitized_text, output_guard_info = self.output_guard.scan_text("".join(full_output_parts))
+                safe_stream_text, stream_output_safety = self._sanitize_internal_tool_markup_response("".join(full_output_parts))
+                outcome.output_safety = stream_output_safety
+                sanitized_text, output_guard_info = self.output_guard.scan_text(safe_stream_text)
                 if output_guard_info.output_redacted:
                     yield self._to_sse(
                         {
@@ -467,7 +479,9 @@ class ChatOrchestrator:
                     )
                 outcome.assistant_content = sanitized_text
             else:
-                outcome.assistant_content = "".join(full_output_parts)
+                safe_stream_text, stream_output_safety = self._sanitize_internal_tool_markup_response("".join(full_output_parts))
+                outcome.output_safety = stream_output_safety
+                outcome.assistant_content = safe_stream_text
 
             outcome.guard = self._combine_guard_info(input_guard_info, output_guard_info)
             outcome.status = "success"
@@ -503,6 +517,7 @@ class ChatOrchestrator:
                     "orchestration": outcome.orchestration.model_dump(),
                     "semantic_recall": outcome.semantic_recall.model_dump(),
                     "provider_health": outcome.provider_health.model_dump() if outcome.provider_health else None,
+                    "output_safety": outcome.output_safety.model_dump(),
                     "conversation": (
                         ConversationInfo(
                             id=outcome.conversation_id,
@@ -520,6 +535,23 @@ class ChatOrchestrator:
             yield self._done_sse()
 
         return StreamHandle(events=stream_events(), outcome=outcome)
+
+    @staticmethod
+    def _sanitize_internal_tool_markup_response(text: str) -> tuple[str, OutputSafetyInfo]:
+        sanitized_text, safety_meta = sanitize_internal_tool_markup(text)
+        detected = bool(safety_meta.get("internal_tool_markup_detected"))
+        removed = bool(safety_meta.get("internal_tool_markup_removed"))
+        normalized = str(sanitized_text or "").strip()
+        if detected and not normalized:
+            normalized = (
+                "I could not complete the tool/search request safely. "
+                "Please try again with tools disabled or provide the data directly."
+            )
+            removed = True
+        return normalized, OutputSafetyInfo(
+            internal_tool_markup_detected=detected,
+            internal_tool_markup_removed=removed,
+        )
 
     def _normalize_and_validate_request(self, request: ChatCompletionRequest) -> str | list[str]:
         if request.search not in {"auto", "on", "off"}:

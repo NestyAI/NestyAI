@@ -1384,6 +1384,103 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "internal-diagnostics"
+        ],
+        "summary": "Clear Provider Health Endpoint",
+        "operationId": "clear_provider_health_endpoint_internal_diagnostics_provider_health_delete",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "model_alias",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Alias"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "older_than_seconds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Older Than Seconds"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Clear Provider Health Endpoint Internal Diagnostics Provider Health Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/internal/diagnostics/provider-health/latest": {
@@ -1873,6 +1970,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ProviderHealthInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "output_safety": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OutputSafetyInfo"
               },
               {
                 "type": "null"
@@ -2383,6 +2490,22 @@
         },
         "type": "object",
         "title": "OrchestrationInfo"
+      },
+      "OutputSafetyInfo": {
+        "properties": {
+          "internal_tool_markup_detected": {
+            "type": "boolean",
+            "title": "Internal Tool Markup Detected",
+            "default": false
+          },
+          "internal_tool_markup_removed": {
+            "type": "boolean",
+            "title": "Internal Tool Markup Removed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "OutputSafetyInfo"
       },
       "ProviderHealthCheckRequest": {
         "properties": {

@@ -68,6 +68,43 @@ class _ProRouter:
         )
 
 
+class _ProRouterWithInternalMarkup(_ProRouter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.role_messages: dict[str, list[ChatMessage]] = {}
+
+    async def generate_with_provider_chain(
+        self,
+        request_id,
+        provider_chain,
+        messages,
+        temperature,
+        max_tokens,
+        trace_label="custom_chain",
+    ):
+        self.generate_calls.append(trace_label)
+        role_name = trace_label.split(":")[-1]
+        self.role_messages[role_name] = messages
+        if role_name == "finalizer":
+            content = (
+                "<longcat_tool_call>search\n"
+                "<longcat_arg_key>query</longcat_arg_key>\n"
+                "<longcat_arg_value>latest news</longcat_arg_value>\n"
+                "</longcat_tool_call>\n"
+                "Done safely."
+            )
+        else:
+            content = "<longcat_tool_call>search</longcat_tool_call>"
+        return _DummyRouteResult(
+            provider_result=ProviderChatResult(
+                provider="internal",
+                content=content,
+                usage=ProviderUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+            ),
+            provider_used="internal",
+        )
+
+
 def _pro_models_config() -> ModelsConfig:
     roles = {
         "planner": OrchestrationRoleConfig(provider_chain=[ProviderTarget(provider="dummy", model="planner-model")]),
@@ -177,3 +214,30 @@ async def test_nesty_pro_stream_does_not_use_multi_model_orchestration() -> None
     assert handle.outcome.orchestration.fallback_used is True
     assert handle.outcome.orchestration.fallback_reason == "streaming_fallback"
     assert handle.outcome.orchestration.skipped_roles == ["planner", "researcher", "critic", "finalizer"]
+
+
+@pytest.mark.asyncio
+async def test_nesty_pro_internal_tool_markup_is_removed_from_final_output() -> None:
+    router = _ProRouterWithInternalMarkup()
+    orchestrator = _build_orchestrator(router)
+    request = ChatCompletionRequest(
+        model="nesty-pro-1.0",
+        messages=[ChatMessage(role="user", content="Analyze and use tools if needed")],
+        search="off",
+        tools="off",
+        stream=False,
+        orchestration="force",
+    )
+    response = await orchestrator.create_chat_completion("req_pro_markup", request)
+    content = response.choices[0].message.content
+    assert "<longcat_tool_call" not in content
+    assert "longcat_arg_key" not in content
+    assert "longcat_arg_value" not in content
+    assert "Done safely." in content
+    assert response.output_safety is not None
+    assert response.output_safety.internal_tool_markup_removed is True
+    payload = response.model_dump_json()
+    assert "longcat_tool_call" not in payload
+    finalizer_payload = "\n".join(item.content for item in router.role_messages.get("finalizer", []))
+    assert "longcat_tool_call" not in finalizer_payload
+    assert "longcat_arg_key" not in finalizer_payload

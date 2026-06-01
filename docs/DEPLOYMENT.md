@@ -18,7 +18,7 @@ To deploy NestyAI locally for development or testing:
    ```bash
    copy .env.example .env
    ```
-   Edit `.env` and set at least one provider API key (`GROQ_API_KEY`, `OPENROUTER_API_KEY`, etc.).
+   Edit `.env` and set at least one provider API key (`GROQ_API_KEY`, `OPENROUTER_API_KEY`, `NVIDIA_API_KEY`, `OLLAMA_API_KEY`).
 4. **Run Diagnostics**:
    ```bash
    python scripts/doctor.py

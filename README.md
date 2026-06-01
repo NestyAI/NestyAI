@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/FastAPI-Production%20Ready-009688" alt="FastAPI" />
   <img src="https://img.shields.io/badge/API-OpenAI%20Compatible-orange" alt="OpenAI Compatible" />
   <img src="https://img.shields.io/badge/streaming-SSE-ff9800" alt="SSE" />
-  <img src="https://img.shields.io/badge/version-1.0.4-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.1.0-blue" alt="Version" />
   <img src="https://img.shields.io/badge/tests-413%20passed-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License: Apache-2.0" />
 </p>
@@ -37,7 +37,7 @@ In short: NestyAI gives you enterprise-like gateway discipline in a lean, develo
 It gives you:
 - OpenAI-compatible `POST /v1/chat/completions`
 - Stable public model aliases (`nesty-flash-1.0`, `nesty-combined-1.0`, `nesty-pro-1.0`)
-- Deterministic provider fallback across Groq, OpenRouter, and NVIDIA
+- Deterministic provider fallback across Groq, OpenRouter, NVIDIA, and Ollama Cloud
 - Built-in safety guards (input, context, output)
 - Local-first memory stack with SQLite, FTS search, summaries, and optional semantic recall
 - Optional deployment polish for Cloudflare Tunnel and panel environments
@@ -86,7 +86,7 @@ NestyAI Gateway (FastAPI)
    |- Internal diagnostics + health summary
    |
    v
-Provider chain (Groq / OpenRouter / NVIDIA) with deterministic fallback
+Provider chain (Groq / OpenRouter / NVIDIA / Ollama Cloud) with deterministic fallback
 ```
 
 ---
@@ -120,6 +120,7 @@ Set at least one provider key:
 - `GROQ_API_KEY`
 - `OPENROUTER_API_KEY`
 - `NVIDIA_API_KEY` (optional)
+- `OLLAMA_API_KEY` (optional)
 
 ### 3) Validate Setup
 

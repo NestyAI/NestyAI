@@ -29,6 +29,19 @@ def _since_iso(since_seconds: int | None) -> str | None:
     return datetime.fromtimestamp(cutoff, tz=timezone.utc).isoformat()
 
 
+def _older_than_iso(older_than_seconds: int | None) -> str | None:
+    if older_than_seconds is None:
+        return None
+    try:
+        seconds = int(older_than_seconds)
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0:
+        return None
+    cutoff = datetime.now(timezone.utc).timestamp() - float(seconds)
+    return datetime.fromtimestamp(cutoff, tz=timezone.utc).isoformat()
+
+
 def get_settings():
     from app.deps import get_settings as deps_get_settings
 
@@ -404,3 +417,34 @@ def summarize_provider_health(
             for row in provider_rows
         ],
     }
+
+
+def delete_provider_health_checks(
+    provider: str | None = None,
+    model_alias: str | None = None,
+    status: str | None = None,
+    older_than_seconds: int | None = None,
+    db_path: str | None = None,
+) -> int:
+    sql = "DELETE FROM provider_health_checks WHERE 1=1"
+    params: list[Any] = []
+    if provider:
+        sql += " AND provider = ?"
+        params.append(str(provider).strip())
+    if model_alias:
+        sql += " AND model_alias = ?"
+        params.append(str(model_alias).strip())
+    if status:
+        sql += " AND status = ?"
+        params.append(_normalize_status(status))
+    older_than_iso = _older_than_iso(older_than_seconds)
+    if older_than_iso:
+        sql += " AND checked_at <= ?"
+        params.append(older_than_iso)
+    try:
+        with get_connection(_effective_db_path(db_path)) as conn:
+            cursor = conn.execute(sql, tuple(params))
+            conn.commit()
+            return int(cursor.rowcount or 0)
+    except sqlite3.OperationalError:
+        return 0

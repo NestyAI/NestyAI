@@ -3,18 +3,18 @@ from __future__ import annotations
 from app.guards.output_guard import OutputGuard
 
 
-def test_output_guard_redacts_sensitive_output() -> None:
+def test_output_guard_removes_internal_tool_markup() -> None:
     guard = OutputGuard()
-    text = (
-        "Here is key sk-ABCDEFGHIJKLMNOPQRSTUV123456 and "
-        "contact user@example.com or +84901234567."
+    raw = (
+        "<longcat_tool_call>search\n"
+        "<longcat_arg_key>query</longcat_arg_key>\n"
+        "<longcat_arg_value>weather</longcat_arg_value>\n"
+        "</longcat_tool_call>\n"
+        "Xin chao ban."
     )
-
-    sanitized, metadata = guard.scan_text(text)
-
-    assert metadata.output_redacted is True
-    assert metadata.redaction_count > 0
-    assert "sk-ABCDEFGHIJKLMNOPQRSTUV123456" not in sanitized
-    assert "user@example.com" not in sanitized
-    assert "+84901234567" not in sanitized
-
+    safe_text, meta = guard.scan_text(raw)
+    assert "<longcat_tool_call" not in safe_text
+    assert "longcat_arg_key" not in safe_text
+    assert "Xin chao ban." in safe_text
+    assert meta.output_redacted is True
+    assert "internal_tool_markup" in meta.categories

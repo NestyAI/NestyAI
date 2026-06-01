@@ -111,6 +111,32 @@ async def test_router_fallback_timeout_then_success() -> None:
 
 
 @pytest.mark.asyncio
+async def test_router_fallback_404_non_retryable_then_success() -> None:
+    def model_missing():
+        raise ProviderError(provider="groq", message="Provider rejected request.", retryable=False, status_code=404)
+
+    def success():
+        return ProviderChatResult(provider="openrouter", content="ok-404")
+
+    router = _router_with(
+        {
+            "groq": DummyProvider("groq", model_missing),
+            "openrouter": DummyProvider("openrouter", success),
+        }
+    )
+
+    result = await router.route_chat(
+        request_id="req_test",
+        model_alias="nesty-test",
+        messages=[ChatMessage(role="user", content="hello")],
+        temperature=0.7,
+        max_tokens=128,
+    )
+    assert result.provider_used == "openrouter"
+    assert result.provider_result.content == "ok-404"
+
+
+@pytest.mark.asyncio
 async def test_router_fallback_429_then_success() -> None:
     def throttled():
         raise ProviderError(provider="groq", message="429", retryable=True, status_code=429)
@@ -162,4 +188,5 @@ async def test_router_all_providers_fail_structured_error() -> None:
     assert exc.code == "all_providers_failed"
     assert "attempted_providers" in exc.details
     assert exc.details["attempted_providers"] == ["groq", "openrouter", "nvidia"]
+    assert isinstance(exc.details.get("provider_errors"), list)
 

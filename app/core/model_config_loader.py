@@ -7,7 +7,7 @@ from app.storage.model_configs import get_model_override, list_model_overrides
 from app.utils.logging import get_logger, log_safe
 
 
-SUPPORTED_PROVIDERS = {"groq", "openrouter", "nvidia"}
+SUPPORTED_PROVIDERS = {"groq", "openrouter", "nvidia", "ollama_cloud"}
 ALLOWED_OVERRIDE_FIELDS = {
     "display_name",
     "behavior_profile",

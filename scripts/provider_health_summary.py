@@ -52,7 +52,19 @@ def _render_rows(
     if show_reliability and reliability_by_target:
         headers = ["model_alias", "role", "provider", "model", "latest", "score", "confidence", "samples", "avg_latency"]
     else:
-        headers = ["provider", "model_alias", "role", "model", "status", "stale", "latency_ms", "checked_at", "error_code"]
+        headers = [
+            "provider",
+            "model_alias",
+            "role",
+            "model",
+            "status",
+            "stale",
+            "latency_ms",
+            "checked_at",
+            "error_code",
+            "config_source",
+            "config_revision",
+        ]
 
     widths = {h: len(h) for h in headers}
 
@@ -81,6 +93,9 @@ def _render_rows(
               # but prompt returns standard string
             elif h == "avg_latency":
                 val = rel.get("avg_latency_ms")
+            elif h in {"config_source", "config_revision"}:
+                meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+                val = meta.get(h)
             else:
                 val = row.get(h)
 
@@ -115,6 +130,9 @@ def _render_rows(
                 val = rel.get("sample_count")
             elif h == "avg_latency":
                 val = rel.get("avg_latency_ms")
+            elif h in {"config_source", "config_revision"}:
+                meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+                val = meta.get(h)
             else:
                 val = row.get(h)
             values.append("" if val is None else str(val))

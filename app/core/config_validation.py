@@ -132,10 +132,18 @@ def validate_model_chains(project_root: Path | None = None) -> list[dict[str, An
     try:
         models_config = load_models_config(models_path)
         embedding_keywords = {"embed", "similarity", "vector", "clip"}
+        supported_providers = {"groq", "openrouter", "nvidia", "ollama_cloud"}
 
         for model_id, profile in models_config.models.items():
             # Check main provider chain
             for idx, target in enumerate(profile.provider_chain):
+                provider_name = str(target.provider or "").strip()
+                if provider_name not in supported_providers:
+                    results.append({
+                        "name": f"model_chain_{model_id}_main_{idx}",
+                        "status": "FAIL",
+                        "message": f"Unsupported provider '{provider_name}' in chat provider chain for model alias '{model_id}'."
+                    })
                 model_name = target.model.lower()
                 if any(kw in model_name for kw in embedding_keywords):
                     results.append({
@@ -147,6 +155,13 @@ def validate_model_chains(project_root: Path | None = None) -> list[dict[str, An
             # Check orchestration roles
             for role_name, role_cfg in profile.orchestration_roles.items():
                 for idx, target in enumerate(role_cfg.provider_chain):
+                    provider_name = str(target.provider or "").strip()
+                    if provider_name not in supported_providers:
+                        results.append({
+                            "name": f"model_chain_{model_id}_{role_name}_{idx}",
+                            "status": "FAIL",
+                            "message": f"Unsupported provider '{provider_name}' in orchestration role '{role_name}' for model alias '{model_id}'."
+                        })
                     model_name = target.model.lower()
                     if any(kw in model_name for kw in embedding_keywords):
                         results.append({
@@ -299,7 +314,8 @@ def validate_runtime_setup(settings: Settings | None = None) -> list[dict[str, A
     provider_keys = {
         "GROQ_API_KEY": s.groq_api_key,
         "OPENROUTER_API_KEY": s.openrouter_api_key,
-        "NVIDIA_API_KEY": s.nvidia_api_key
+        "NVIDIA_API_KEY": s.nvidia_api_key,
+        "OLLAMA_API_KEY": s.ollama_api_key,
     }
 
     set_keys = [k for k, v in provider_keys.items() if v and len(v.strip()) > 0]
@@ -317,7 +333,7 @@ def validate_runtime_setup(settings: Settings | None = None) -> list[dict[str, A
         results.append({
             "name": "provider_api_keys",
             "status": "WARN",
-            "message": "No provider API keys are configured (GROQ_API_KEY, OPENROUTER_API_KEY, NVIDIA_API_KEY). At least one is required to route chat completions."
+            "message": "No provider API keys are configured (GROQ_API_KEY, OPENROUTER_API_KEY, NVIDIA_API_KEY, OLLAMA_API_KEY). At least one is required to route chat completions."
         })
     else:
         results.append({
@@ -325,5 +341,23 @@ def validate_runtime_setup(settings: Settings | None = None) -> list[dict[str, A
             "status": "PASS",
             "message": f"Configured provider API keys: {', '.join(set_keys)}"
         })
+
+    ollama_base_url = str(getattr(s, "ollama_base_url", "") or "").strip()
+    if ollama_base_url and not (ollama_base_url.startswith("http://") or ollama_base_url.startswith("https://")):
+        results.append(
+            {
+                "name": "ollama_base_url_shape",
+                "status": "WARN",
+                "message": "OLLAMA_BASE_URL should start with http:// or https://",
+            }
+        )
+    else:
+        results.append(
+            {
+                "name": "ollama_base_url_shape",
+                "status": "PASS",
+                "message": "OLLAMA_BASE_URL shape looks valid",
+            }
+        )
 
     return results

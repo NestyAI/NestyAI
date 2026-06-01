@@ -55,3 +55,12 @@ def test_explicit_free_chat_model_ids_accepted() -> None:
     )
     assert valid is True
     assert error is None
+
+
+def test_ollama_cloud_provider_is_supported() -> None:
+    valid, error = validate_model_config_override(
+        "nesty-combined-1.0",
+        {"provider_chain": [{"provider": "ollama_cloud", "model": "gemma3:12b"}]},
+    )
+    assert valid is True
+    assert error is None

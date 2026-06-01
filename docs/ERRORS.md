@@ -96,3 +96,7 @@ All API errors return a standard JSON structure with HTTP status code matching t
 *   `model_config_update_failed`: Failed to write model config overrides.
 *   `model_config_test_failed`: Provider test verification returned errors.
 *   `diagnostics_disabled`: Attempting to use diagnostics endpoints when disabled.
+*   `provider_auth_failed`: Diagnostics provider check failed due to auth/credential issue (401/403).
+*   `provider_model_unavailable`: Diagnostics provider check could not find requested model (404).
+*   `rate_limited`: Diagnostics provider check hit upstream rate limit (429).
+*   `provider_timeout`: Diagnostics provider check timed out.

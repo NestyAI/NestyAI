@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -11,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.core.model_config_loader import get_effective_model_config, list_effective_model_configs
+from app.core.model_config_loader import list_effective_model_configs
 from app.core.provider_diagnostics import (
     diagnose_all_model_aliases,
     diagnose_model_alias,
@@ -49,6 +50,13 @@ def _target_key(model_alias: str | None, role: str | None, provider: str | None,
         str(provider or "").strip(),
         str(model or "").strip(),
     )
+
+
+def _config_revision(config_payload: dict | None) -> str | None:
+    if not isinstance(config_payload, dict):
+        return None
+    encoded = json.dumps(config_payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
 def _render_rows(rows: list[dict]) -> str:
@@ -108,8 +116,14 @@ def _summarize_rows(rows: list[dict]) -> dict:
 def _collect_targets(model_alias: str | None, include_roles: bool) -> list[dict]:
     targets: list[dict] = []
     if model_alias:
-        effective = get_effective_model_config(model_alias)
+        row = next(
+            (item for item in list_effective_model_configs() if str(item.get("model_id") or "").strip() == model_alias),
+            None,
+        )
+        effective = row.get("effective_config") if isinstance(row, dict) else None
         if isinstance(effective, dict):
+            source = str(row.get("config_source") or "effective").strip().lower() if isinstance(row, dict) else "effective"
+            revision = _config_revision(effective)
             targets.extend(
                 extract_configured_provider_targets(
                     model_alias=model_alias,
@@ -117,15 +131,21 @@ def _collect_targets(model_alias: str | None, include_roles: bool) -> list[dict]
                     include_roles=include_roles,
                 )
             )
+            for item in targets:
+                item["config_source"] = source
+                item["config_revision"] = revision
         return targets
 
     for row in list_effective_model_configs():
         alias = str(row.get("model_id") or "").strip()
         if not alias:
             continue
-        effective = get_effective_model_config(alias)
+        effective = row.get("effective_config")
         if not isinstance(effective, dict):
             continue
+        source = str(row.get("config_source") or "effective").strip().lower()
+        revision = _config_revision(effective)
+        start_index = len(targets)
         targets.extend(
             extract_configured_provider_targets(
                 model_alias=alias,
@@ -133,6 +153,9 @@ def _collect_targets(model_alias: str | None, include_roles: bool) -> list[dict]
                 include_roles=include_roles,
             )
         )
+        for item in targets[start_index:]:
+            item["config_source"] = source
+            item["config_revision"] = revision
     return targets
 
 
@@ -182,6 +205,8 @@ async def _run(args) -> int:
                 model_alias=str(item.get("model_alias") or "") or None,
                 role=str(item.get("role") or "") or None,
                 order=int(item.get("order") or 0),
+                config_source=str(item.get("config_source") or "effective"),
+                config_revision=str(item.get("config_revision") or "") or None,
                 dry_run=not save_enabled,
             )
             rows.append(checked)
@@ -224,6 +249,8 @@ async def _run(args) -> int:
                 "latency_ms": row.get("latency_ms"),
                 "tokens_per_second": row.get("tokens_per_second"),
                 "error_code": row.get("error_code"),
+                "config_source": row.get("config_source"),
+                "config_revision": row.get("config_revision"),
             }
             for row in rows
         ],

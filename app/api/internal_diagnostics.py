@@ -7,7 +7,13 @@ from app.core.errors import APIError
 from app.core.provider_diagnostics import diagnose_all_model_aliases, diagnose_model_alias, diagnose_provider_model
 from app.deps import get_settings
 from app.security.internal_auth import require_internal_admin
-from app.storage.provider_health import get_latest_provider_health, list_provider_health_checks, summarize_provider_health, list_recent_health_samples
+from app.storage.provider_health import (
+    delete_provider_health_checks,
+    get_latest_provider_health,
+    list_provider_health_checks,
+    summarize_provider_health,
+    list_recent_health_samples,
+)
 from app.core.provider_reliability import summarize_reliability_for_targets
 
 
@@ -94,6 +100,31 @@ async def latest_provider_health_endpoint(
         "object": "list",
         "data": rows,
         "summary": summary,
+    }
+
+
+@router.delete("/provider-health")
+async def clear_provider_health_endpoint(
+    provider: str | None = None,
+    model_alias: str | None = None,
+    status: str | None = None,
+    older_than_seconds: int | None = None,
+) -> dict:
+    _require_diagnostics_enabled()
+    deleted = delete_provider_health_checks(
+        provider=provider,
+        model_alias=model_alias,
+        status=status,
+        older_than_seconds=older_than_seconds,
+    )
+    return {
+        "deleted": deleted,
+        "filters": {
+            "provider": provider,
+            "model_alias": model_alias,
+            "status": status,
+            "older_than_seconds": older_than_seconds,
+        },
     }
 
 

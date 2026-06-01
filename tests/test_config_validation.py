@@ -112,6 +112,28 @@ def test_validate_model_chains_clean(tmp_path: Path) -> None:
     assert len(failures) == 0
 
 
+def test_validate_model_chains_rejects_unknown_provider(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    bad_config = {
+        "models": {
+            "nesty-flash-1.0": {
+                "display_name": "Flash",
+                "description": "Flash",
+                "strategy": "speed",
+                "search_mode": "auto",
+                "provider_chain": [{"provider": "unknown", "model": "x"}],
+            }
+        }
+    }
+    models_file = config_dir / "models.yaml"
+    models_file.write_text(yaml.dump(bad_config), encoding="utf-8")
+    results = validate_model_chains(tmp_path)
+    failures = [r for r in results if r["status"] == "FAIL"]
+    assert failures
+    assert "Unsupported provider" in failures[0]["message"]
+
+
 def test_validate_env_safety_wildcard_cors_production() -> None:
     settings = Settings(
         app_env="production",
@@ -190,6 +212,13 @@ def test_env_example_contains_cloudflare_tunnel_preset_vars() -> None:
         assert line in env_text
 
 
+def test_env_example_contains_ollama_cloud_vars() -> None:
+    env_text = Path(".env.example").read_text(encoding="utf-8")
+    assert "OLLAMA_API_KEY=" in env_text
+    assert "OLLAMA_BASE_URL=https://ollama.com" in env_text
+    assert "OLLAMA_REQUEST_TIMEOUT_SECONDS=60" in env_text
+
+
 def test_deployment_doc_mentions_cloudflare_tunnel_modes() -> None:
     deployment_doc = Path("docs/DEPLOYMENT.md").read_text(encoding="utf-8")
     assert "Cloudflare Tunnel Deployment" in deployment_doc
@@ -215,3 +244,13 @@ def test_validate_runtime_setup_does_not_require_cloudflare_tunnel_token(tmp_pat
     results = validate_runtime_setup(settings)
     failures = [item for item in results if item["status"] == "FAIL"]
     assert not failures
+
+
+def test_validate_runtime_setup_invalid_ollama_base_url_warns(tmp_path: Path) -> None:
+    settings = Settings(
+        nesty_db_path=str(tmp_path / "test_ollama_url.db"),
+        ollama_base_url="ollama.com",
+    )
+    results = validate_runtime_setup(settings)
+    res_map = {r["name"]: r for r in results}
+    assert res_map["ollama_base_url_shape"]["status"] == "WARN"

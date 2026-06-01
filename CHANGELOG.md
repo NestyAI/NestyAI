@@ -7,6 +7,36 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.1.0] - Unreleased
+
+### Added
+- Added Ollama Cloud provider integration for provider chains and diagnostics.
+- Added Ollama Cloud environment configuration.
+
+### Fixed
+- Fixed provider-chain fallback behavior so runtime model config fallback entries are attempted when earlier providers/models fail.
+
+### Changed
+- Refreshed default provider chains for Flash, Combined, Pro, and embeddings.
+- Provider diagnostics and benchmark scripts can include ollama_cloud where configured.
+
+### Security
+- Ollama API keys are never logged or exposed in responses.
+
+## [1.0.5] - Unreleased
+
+### Fixed
+- Prevented `nesty-pro-1.0` from leaking raw internal tool-call markup in final assistant responses.
+- Ensured diagnostics checks use effective runtime model config (default + active override) consistently.
+
+### Added
+- Added internal admin diagnostics cleanup endpoint: `DELETE /internal/diagnostics/provider-health`.
+- Added safe diagnostics metadata fields for config source/revision and provider/model failure classification.
+- Added output safety metadata: `output_safety.internal_tool_markup_removed`.
+
+### Security
+- Internal tool-call markup, hidden role notes, hidden prompts, and raw provider error details remain hidden from client-visible responses and diagnostics metadata.
+
 ## [1.0.4] - 2026-06-01
 
 ### Added

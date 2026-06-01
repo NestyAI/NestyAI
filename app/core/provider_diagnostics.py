@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import re
 import time
 from typing import Any
@@ -11,6 +13,7 @@ from app.core.model_config_loader import get_effective_model_config, list_effect
 from app.providers.base import BaseProvider
 from app.providers.groq import GroqProvider
 from app.providers.nvidia import NvidiaProvider
+from app.providers.ollama_cloud import OllamaCloudProvider
 from app.providers.openrouter import OpenRouterProvider
 from app.schemas.chat import ChatMessage
 from app.storage.provider_health import record_provider_health_check
@@ -104,6 +107,11 @@ def _build_providers(settings: Settings, timeout_seconds: float) -> dict[str, Ba
             timeout_seconds=timeout_seconds,
             base_url=settings.nvidia_base_url,
         ),
+        "ollama_cloud": OllamaCloudProvider(
+            api_key=settings.ollama_api_key,
+            timeout_seconds=timeout_seconds,
+            base_url=settings.ollama_base_url,
+        ),
     }
 
 
@@ -149,6 +157,52 @@ def _build_status_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _compute_config_revision(config_payload: dict[str, Any] | None) -> str | None:
+    if not isinstance(config_payload, dict):
+        return None
+    encoded = json.dumps(config_payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _resolve_effective_config_entry(model_alias: str) -> tuple[dict[str, Any] | None, str, str | None]:
+    alias = str(model_alias or "").strip()
+    if not alias:
+        return None, "unknown", None
+    rows = list_effective_model_configs()
+    for row in rows:
+        if str(row.get("model_id") or "").strip() != alias:
+            continue
+        effective = row.get("effective_config")
+        if isinstance(effective, dict):
+            source = str(row.get("config_source") or "effective").strip().lower()
+            if source not in {"default", "override", "effective", "unknown"}:
+                source = "effective"
+            return effective, source, _compute_config_revision(effective)
+    effective = get_effective_model_config(alias)
+    if isinstance(effective, dict):
+        return effective, "effective", _compute_config_revision(effective)
+    return None, "unknown", None
+
+
+def _classify_provider_error(exc: ProviderError) -> tuple[str, str]:
+    message_text = str(exc.message or "").lower()
+    status_code = int(exc.status_code or 0)
+
+    if "timed out" in message_text or "timeout" in message_text:
+        return "timeout", "provider_timeout"
+    if status_code in {401, 403}:
+        return "failed", "provider_auth_failed"
+    if status_code == 404:
+        return "failed", "provider_model_unavailable"
+    if status_code == 429 or "rate limit" in message_text:
+        return "unavailable", "rate_limited"
+    if "model unavailable" in message_text or "model not found" in message_text:
+        return "failed", "provider_model_unavailable"
+    if exc.retryable or "connection" in message_text or "temporarily unavailable" in message_text:
+        return "unavailable", "provider_unavailable"
+    return "failed", "provider_diagnostic_failed"
+
+
 async def diagnose_provider_model(
     provider: str,
     model: str,
@@ -157,6 +211,8 @@ async def diagnose_provider_model(
     model_alias: str | None = None,
     role: str | None = None,
     order: int | None = None,
+    config_source: str | None = None,
+    config_revision: str | None = None,
     dry_run: bool = False,
 ) -> dict:
     settings = get_settings()
@@ -189,6 +245,8 @@ async def diagnose_provider_model(
         "output_chars": 0,
         "tokens_per_second": None,
         "checked_at": checked_at,
+        "config_source": str(config_source or "unknown").strip().lower() or "unknown",
+        "config_revision": str(config_revision or "").strip() or None,
         "metadata": {},
     }
     if provider_client is None:
@@ -230,24 +288,17 @@ async def diagnose_provider_model(
         except asyncio.TimeoutError:
             result.update({"status": "timeout", "error_code": "provider_timeout"})
         except MissingAPIKeyError:
-            result.update({"status": "unavailable", "error_code": "missing_api_key"})
+            result.update({"status": "failed", "error_code": "provider_auth_failed"})
         except ProviderError as exc:
-            message_text = str(exc.message or "").lower()
-            if "timed out" in message_text:
-                status = "timeout"
-                error_code = "provider_timeout"
-            elif "missing api key" in message_text:
-                status = "unavailable"
-                error_code = "missing_api_key"
-            elif exc.retryable:
-                status = "unavailable"
-                error_code = "provider_unavailable"
-            else:
-                status = "failed"
-                error_code = "provider_diagnostic_failed"
+            status, error_code = _classify_provider_error(exc)
             result.update({"status": status, "error_code": error_code})
         except Exception:
-            result.update({"status": "failed", "error_code": "provider_diagnostic_failed"})
+            result.update({"status": "unavailable", "error_code": "provider_unavailable"})
+
+    if isinstance(result.get("metadata"), dict):
+        result["metadata"]["config_source"] = result["config_source"]
+        if result.get("config_revision"):
+            result["metadata"]["config_revision"] = result["config_revision"]
 
     should_save = bool(getattr(settings, "diagnostics_save_results", True)) and not dry_run
     if should_save:
@@ -274,7 +325,7 @@ async def diagnose_model_alias(
     message: str | None = None,
     dry_run: bool = False,
 ) -> dict:
-    effective = get_effective_model_config(model_alias)
+    effective, config_source, config_revision = _resolve_effective_config_entry(model_alias)
     if not isinstance(effective, dict):
         raise APIError(
             code="invalid_diagnostic_request",
@@ -295,11 +346,15 @@ async def diagnose_model_alias(
             model_alias=str(item.get("model_alias") or model_alias),
             role=str(item.get("role") or "main"),
             order=int(item.get("order") or 0),
+            config_source=config_source,
+            config_revision=config_revision,
             dry_run=dry_run,
         )
         results.append(checked)
     return {
         "model_alias": model_alias,
+        "config_source": config_source,
+        "config_revision": config_revision,
         "include_roles": bool(include_roles),
         "targets_count": len(targets),
         "results": results,

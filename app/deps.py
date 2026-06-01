@@ -12,6 +12,7 @@ from app.guards.output_guard import OutputGuard
 from app.providers.base import BaseProvider
 from app.providers.groq import GroqProvider
 from app.providers.nvidia import NvidiaProvider
+from app.providers.ollama_cloud import OllamaCloudProvider
 from app.providers.openrouter import OpenRouterProvider
 from app.tools.registry import tool_registry
 from app.utils.logging import get_logger
@@ -47,6 +48,11 @@ def get_providers() -> dict[str, BaseProvider]:
             api_key=settings.nvidia_api_key,
             timeout_seconds=timeout,
             base_url=settings.nvidia_base_url,
+        ),
+        "ollama_cloud": OllamaCloudProvider(
+            api_key=settings.ollama_api_key,
+            timeout_seconds=float(settings.ollama_request_timeout_seconds or timeout),
+            base_url=settings.ollama_base_url,
         ),
     }
 

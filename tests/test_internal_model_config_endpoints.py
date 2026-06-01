@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.deps import get_settings
 from app.storage.db import init_db
 
 
@@ -45,6 +46,17 @@ def _set_db_settings(monkeypatch, db_path: str) -> None:
     monkeypatch.setattr("app.storage.model_configs.get_settings", lambda: type("S", (), {"nesty_db_path": db_path})())
 
 
+def _request_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+    headers = dict(extra or {})
+    settings = get_settings()
+    trusted_hosts = str(getattr(settings, "trusted_hosts", "") or "").strip()
+    if trusted_hosts:
+        host = trusted_hosts.split(",")[0].strip()
+        if host:
+            headers["Host"] = host
+    return headers
+
+
 def test_internal_endpoints_disabled_return_404(client, monkeypatch, tmp_path) -> None:
     db_path = str(tmp_path / "internal_disabled.db")
     init_db(db_path)
@@ -53,7 +65,7 @@ def test_internal_endpoints_disabled_return_404(client, monkeypatch, tmp_path) -
         "app.security.internal_auth.get_settings",
         lambda: type("S", (), {"internal_admin_enabled": False, "nesty_internal_admin_token": "abc"})(),
     )
-    response = client.get("/internal/model-configs")
+    response = client.get("/internal/model-configs", headers=_request_headers())
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "internal_admin_disabled"
 
@@ -66,7 +78,7 @@ def test_internal_endpoints_enabled_missing_token_rejected(client, monkeypatch, 
         "app.security.internal_auth.get_settings",
         lambda: type("S", (), {"internal_admin_enabled": True, "nesty_internal_admin_token": "abc"})(),
     )
-    response = client.get("/internal/model-configs")
+    response = client.get("/internal/model-configs", headers=_request_headers())
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "internal_admin_unauthorized"
 
@@ -80,7 +92,7 @@ def test_internal_model_config_crud_and_test_endpoint(client, monkeypatch, tmp_p
         lambda: type("S", (), {"internal_admin_enabled": True, "nesty_internal_admin_token": "abc"})(),
     )
     monkeypatch.setattr("app.api.internal_model_configs.get_provider_router", lambda: _DummyInternalRouter())
-    headers = {"Authorization": "Bearer abc"}
+    headers = _request_headers({"Authorization": "Bearer abc"})
 
     list_resp = client.get("/internal/model-configs", headers=headers)
     assert list_resp.status_code == 200
@@ -153,7 +165,7 @@ def test_internal_model_config_crud_and_test_endpoint(client, monkeypatch, tmp_p
     assert pro_reset_resp.json()["config_source"] == "default"
     assert (
         pro_reset_resp.json()["effective_config"]["orchestration_roles"]["finalizer"]["provider_chain"][0]["model"]
-        == "deepseek/deepseek-v4-flash:free"
+        == "llama-3.3-70b-versatile"
     )
 
     audit_resp = client.get("/internal/model-configs/audit?model_id=nesty-flash-1.0&limit=20", headers=headers)

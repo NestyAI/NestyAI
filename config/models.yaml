@@ -1,4 +1,4 @@
-models:
+﻿models:
   nesty-flash-1.0:
     display_name: "Nesty Flash 1.0"
     description: "Fastest lightweight profile for short and quick responses"
@@ -28,9 +28,11 @@ models:
       - provider: "openrouter"
         model: "google/gemma-4-26b-a4b-it:free"
       - provider: "openrouter"
-        model: "deepseek/deepseek-v4-flash:free"
+        model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
       - provider: "nvidia"
-        model: "default"
+        model: "minimaxai/minimax-m2.7"
+      - provider: "ollama_cloud"
+        model: "gemma3:12b"
 
   nesty-combined-1.0:
     display_name: "Nesty Combined 1.0"
@@ -58,15 +60,17 @@ models:
     max_context_chars: 6000
     provider_chain:
       - provider: "openrouter"
-        model: "deepseek/deepseek-v4-flash:free"
+        model: "openrouter/owl-alpha"
       - provider: "openrouter"
-        model: "moonshotai/kimi-k2.6:free"
+        model: "poolside/laguna-m.1:free"
       - provider: "openrouter"
         model: "openai/gpt-oss-120b:free"
       - provider: "groq"
         model: "llama-3.3-70b-versatile"
       - provider: "nvidia"
-        model: "default"
+        model: "stepfun-ai/step-3.7-flash"
+      - provider: "ollama_cloud"
+        model: "nemotron-3-nano:30b"
 
   nesty-pro-1.0:
     display_name: "Nesty Pro 1.0"
@@ -93,48 +97,62 @@ models:
     max_search_results: 8
     max_context_chars: 12000
     provider_chain:
-      - provider: "openrouter"
-        model: "deepseek/deepseek-v4-flash:free"
       - provider: "groq"
         model: "llama-3.3-70b-versatile"
       - provider: "openrouter"
         model: "moonshotai/kimi-k2.6:free"
+      - provider: "openrouter"
+        model: "openai/gpt-oss-120b:free"
       - provider: "nvidia"
-        model: "default"
+        model: "mistralai/mistral-large-3-675b-instruct-2512"
+      - provider: "ollama_cloud"
+        model: "minimax-m3"
     orchestration_roles:
       planner:
         provider_chain:
           - provider: "groq"
-            model: "llama-3.1-8b-instant"
+            model: "llama-3.3-70b-versatile"
           - provider: "openrouter"
-            model: "google/gemma-4-26b-a4b-it:free"
+            model: "moonshotai/kimi-k2.6:free"
+          - provider: "openrouter"
+            model: "openai/gpt-oss-120b:free"
           - provider: "nvidia"
-            model: "default"
+            model: "mistralai/mistral-large-3-675b-instruct-2512"
+          - provider: "ollama_cloud"
+            model: "minimax-m3"
       researcher:
         provider_chain:
           - provider: "openrouter"
-            model: "nvidia/nemotron-3-super-120b-a12b:free"
+            model: "moonshotai/kimi-k2.6:free"
           - provider: "openrouter"
-            model: "deepseek/deepseek-v4-flash:free"
+            model: "openai/gpt-oss-120b:free"
           - provider: "groq"
             model: "llama-3.3-70b-versatile"
           - provider: "nvidia"
-            model: "default"
+            model: "mistralai/mistral-large-3-675b-instruct-2512"
+          - provider: "ollama_cloud"
+            model: "minimax-m3"
       critic:
         provider_chain:
           - provider: "groq"
             model: "llama-3.3-70b-versatile"
           - provider: "openrouter"
-            model: "qwen/qwen3-next-80b-a3b-instruct:free"
+            model: "moonshotai/kimi-k2.6:free"
+          - provider: "openrouter"
+            model: "openai/gpt-oss-120b:free"
           - provider: "nvidia"
-            model: "default"
+            model: "mistralai/mistral-large-3-675b-instruct-2512"
+          - provider: "ollama_cloud"
+            model: "minimax-m3"
       finalizer:
         provider_chain:
-          - provider: "openrouter"
-            model: "deepseek/deepseek-v4-flash:free"
-          - provider: "openrouter"
-            model: "moonshotai/kimi-k2.6:free"
           - provider: "groq"
             model: "llama-3.3-70b-versatile"
+          - provider: "openrouter"
+            model: "moonshotai/kimi-k2.6:free"
+          - provider: "openrouter"
+            model: "openai/gpt-oss-120b:free"
           - provider: "nvidia"
-            model: "default"
+            model: "mistralai/mistral-large-3-675b-instruct-2512"
+          - provider: "ollama_cloud"
+            model: "minimax-m3"

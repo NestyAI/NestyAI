@@ -84,6 +84,7 @@ class ProviderRouter:
             role=role,
         )
         attempted_providers: list[str] = []
+        provider_errors: list[dict[str, Any]] = []
         last_error_code = "provider_unavailable"
         had_missing_api_key = False
         had_non_missing_failure = False
@@ -93,6 +94,13 @@ class ProviderRouter:
             provider = self.providers.get(provider_name)
 
             if not provider:
+                provider_errors.append(
+                    {
+                        "provider": provider_name,
+                        "model": provider_model,
+                        "error_code": "provider_unavailable",
+                    }
+                )
                 log_safe(
                     self.logger,
                     "provider_missing",
@@ -118,6 +126,13 @@ class ProviderRouter:
             except MissingAPIKeyError:
                 last_error_code = "missing_api_key"
                 had_missing_api_key = True
+                provider_errors.append(
+                    {
+                        "provider": provider_name,
+                        "model": provider_model,
+                        "error_code": "provider_auth_failed",
+                    }
+                )
                 log_safe(
                     self.logger,
                     "provider_failed",
@@ -128,22 +143,36 @@ class ProviderRouter:
                 )
                 continue
             except ProviderError as exc:
-                last_error_code = "provider_unavailable"
                 had_non_missing_failure = True
+                error_code = self._classify_provider_error(exc)
+                last_error_code = error_code
+                provider_errors.append(
+                    {
+                        "provider": provider_name,
+                        "model": provider_model,
+                        "error_code": error_code,
+                        "upstream_status": int(exc.status_code) if exc.status_code else None,
+                    }
+                )
                 log_safe(
                     self.logger,
                     "provider_failed",
                     request_id=request_id,
                     model_alias=trace_label,
                     provider=provider_name,
-                    error_code="provider_unavailable",
+                    error_code=error_code,
                 )
-                if exc.retryable:
+                if self._is_fallbackable_provider_error(error_code):
                     continue
                 raise APIError(
                     code="provider_unavailable",
                     message="Provider unavailable for this request.",
                     status_code=502,
+                    details={
+                        "attempted_providers": attempted_providers,
+                        "provider_errors": provider_errors,
+                        "fallback_used": len(attempted_providers) > 1,
+                    },
                 ) from exc
 
         if not attempted_providers:
@@ -171,7 +200,11 @@ class ProviderRouter:
                 code="missing_api_key",
                 message="Missing API key for all configured providers.",
                 status_code=503,
-                details={"attempted_providers": attempted_providers},
+                details={
+                    "attempted_providers": attempted_providers,
+                    "provider_errors": provider_errors,
+                    "fallback_used": len(attempted_providers) > 1,
+                },
             )
 
         raise APIError(
@@ -180,7 +213,10 @@ class ProviderRouter:
             status_code=503,
             details={
                 "attempted_providers": attempted_providers,
+                "provider_errors": provider_errors,
                 "last_error_code": last_error_code,
+                "fallback_used": len(attempted_providers) > 1,
+                "fallback_reason": last_error_code,
             },
         )
 
@@ -201,6 +237,7 @@ class ProviderRouter:
             )
 
         attempted_providers: list[str] = []
+        provider_errors: list[dict[str, Any]] = []
         last_error_code = "stream_provider_failed"
         had_missing_api_key = False
         had_non_missing_failure = False
@@ -218,6 +255,13 @@ class ProviderRouter:
             provider = self.providers.get(provider_name)
 
             if not provider:
+                provider_errors.append(
+                    {
+                        "provider": provider_name,
+                        "model": provider_model,
+                        "error_code": "provider_unavailable",
+                    }
+                )
                 log_safe(
                     self.logger,
                     "provider_missing",
@@ -244,6 +288,13 @@ class ProviderRouter:
             except StopAsyncIteration:
                 had_non_missing_failure = True
                 last_error_code = "stream_provider_failed"
+                provider_errors.append(
+                    {
+                        "provider": provider_name,
+                        "model": provider_model,
+                        "error_code": "stream_provider_failed",
+                    }
+                )
                 log_safe(
                     self.logger,
                     "provider_stream_failed",
@@ -256,6 +307,13 @@ class ProviderRouter:
             except MissingAPIKeyError:
                 last_error_code = "missing_api_key"
                 had_missing_api_key = True
+                provider_errors.append(
+                    {
+                        "provider": provider_name,
+                        "model": provider_model,
+                        "error_code": "provider_auth_failed",
+                    }
+                )
                 log_safe(
                     self.logger,
                     "provider_stream_failed",
@@ -268,6 +326,13 @@ class ProviderRouter:
             except StreamingNotSupportedError:
                 had_streaming_not_supported = True
                 last_error_code = "streaming_not_supported"
+                provider_errors.append(
+                    {
+                        "provider": provider_name,
+                        "model": provider_model,
+                        "error_code": "streaming_not_supported",
+                    }
+                )
                 log_safe(
                     self.logger,
                     "provider_stream_failed",
@@ -279,21 +344,35 @@ class ProviderRouter:
                 continue
             except ProviderError as exc:
                 had_non_missing_failure = True
-                last_error_code = "stream_provider_failed"
+                error_code = self._classify_provider_error(exc, is_stream=True)
+                last_error_code = error_code
+                provider_errors.append(
+                    {
+                        "provider": provider_name,
+                        "model": provider_model,
+                        "error_code": error_code,
+                        "upstream_status": int(exc.status_code) if exc.status_code else None,
+                    }
+                )
                 log_safe(
                     self.logger,
                     "provider_stream_failed",
                     request_id=request_id,
                     model_alias=model_alias,
                     provider=provider_name,
-                    error_code="stream_provider_failed",
+                    error_code=error_code,
                 )
-                if exc.retryable:
+                if self._is_fallbackable_provider_error(error_code):
                     continue
                 raise APIError(
                     code="stream_provider_failed",
                     message="Provider streaming failed for this request.",
                     status_code=502,
+                    details={
+                        "attempted_providers": attempted_providers,
+                        "provider_errors": provider_errors,
+                        "fallback_used": len(attempted_providers) > 1,
+                    },
                 ) from exc
 
         if not attempted_providers:
@@ -321,7 +400,11 @@ class ProviderRouter:
                 code="missing_api_key",
                 message="Missing API key for all configured providers.",
                 status_code=503,
-                details={"attempted_providers": attempted_providers},
+                details={
+                    "attempted_providers": attempted_providers,
+                    "provider_errors": provider_errors,
+                    "fallback_used": len(attempted_providers) > 1,
+                },
             )
 
         if had_streaming_not_supported and not had_non_missing_failure:
@@ -329,7 +412,11 @@ class ProviderRouter:
                 code="streaming_not_supported",
                 message="Streaming is not supported by configured providers for this model.",
                 status_code=501,
-                details={"attempted_providers": attempted_providers},
+                details={
+                    "attempted_providers": attempted_providers,
+                    "provider_errors": provider_errors,
+                    "fallback_used": len(attempted_providers) > 1,
+                },
             )
 
         raise APIError(
@@ -338,7 +425,10 @@ class ProviderRouter:
             status_code=503,
             details={
                 "attempted_providers": attempted_providers,
+                "provider_errors": provider_errors,
                 "last_error_code": last_error_code,
+                "fallback_used": len(attempted_providers) > 1,
+                "fallback_reason": last_error_code,
             },
         )
 
@@ -444,3 +534,34 @@ class ProviderRouter:
             "all_targets_skipped": all_targets_skipped,
         }
         return provider_health_meta, eligible_targets
+
+    @staticmethod
+    def _classify_provider_error(exc: ProviderError, is_stream: bool = False) -> str:
+        message = str(exc.message or "").strip().lower()
+        status_code = int(exc.status_code or 0)
+        if "timeout" in message or "timed out" in message:
+            return "provider_timeout"
+        if status_code in {401, 403}:
+            return "provider_auth_failed"
+        if status_code == 404 or "model unavailable" in message or "model not found" in message:
+            return "provider_model_unavailable"
+        if status_code == 429 or "rate limit" in message or "rate limited" in message:
+            return "rate_limited"
+        if status_code >= 500 or "temporarily unavailable" in message or "connection" in message:
+            return "provider_unavailable"
+        if is_stream:
+            return "stream_provider_failed"
+        return "provider_failed"
+
+    @staticmethod
+    def _is_fallbackable_provider_error(error_code: str) -> bool:
+        return error_code in {
+            "provider_auth_failed",
+            "provider_model_unavailable",
+            "rate_limited",
+            "provider_timeout",
+            "provider_unavailable",
+            "provider_failed",
+            "stream_provider_failed",
+            "streaming_not_supported",
+        }

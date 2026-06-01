@@ -182,6 +182,10 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
         "reason": "no_matches"
       },
       "provider_health": null,
+      "output_safety": {
+        "internal_tool_markup_detected": false,
+        "internal_tool_markup_removed": false
+      },
       "auth": null,
       "conversation": {
         "id": "conv_123",
@@ -193,13 +197,14 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
       "model_alias": "nesty-combined-1.0"
     }
     ```
+    *   `provider` is selected from the configured provider chain (e.g. `groq`, `openrouter`, `nvidia`, `ollama_cloud`) after fallback resolution.
 *   **Response (200 OK) Streaming (`stream=true`)**:
     *   Content-Type: `text/event-stream`
     *   Emits sequential server-sent events:
         *   **Chunk Event**:
             `data: {"id": "...", "object": "chat.completion.chunk", "created": 1234, "model": "...", "provider": "...", "choices": [{"index": 0, "delta": {"content": "part"}, "finish_reason": null}]}`
         *   **Metadata Event**:
-            `data: {"id": "...", "object": "chat.completion.metadata", "created": 1234, "model": "...", "provider": "...", "guard": {...}, "tools": {...}, "sources": [...], "usage": {...}, "orchestration": {...}, "semantic_recall": {...}, "provider_health": {...}, "conversation": {...}, "model_alias": "..."}`
+            `data: {"id": "...", "object": "chat.completion.metadata", "created": 1234, "model": "...", "provider": "...", "guard": {...}, "tools": {...}, "sources": [...], "usage": {...}, "orchestration": {...}, "semantic_recall": {...}, "provider_health": {...}, "output_safety": {...}, "conversation": {...}, "model_alias": "..."}`
         *   **Termination Event**:
             `data: [DONE]`
         *   **Interrupted Stream Error (if interrupted)**:
@@ -457,6 +462,7 @@ Internal endpoints are hidden administrative routes.
 ### 3. Diagnostics
 *   `GET /internal/diagnostics/provider-health`: List historical health records
 *   `GET /internal/diagnostics/provider-health/latest`: Get latest target states
+*   `DELETE /internal/diagnostics/provider-health`: Clear provider health history (supports optional filters)
 *   `GET /internal/diagnostics/provider-health/summary`: Reliability & latency summary metrics
 *   `POST /internal/diagnostics/provider-health/check`: Trigger test on alias
 *   `POST /internal/diagnostics/provider-model/check`: Trigger direct provider/model check

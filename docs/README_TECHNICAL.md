@@ -41,6 +41,7 @@ It is designed to stay local, lightweight, and testable.
   - Groq
   - OpenRouter
   - NVIDIA (configured route)
+  - Ollama Cloud
 - Guard stack:
   - `InputGuard`
   - `ContextGuard`
@@ -95,6 +96,7 @@ Set at least one provider API key:
 - `GROQ_API_KEY`
 - `OPENROUTER_API_KEY`
 - `NVIDIA_API_KEY` (optional)
+- `OLLAMA_API_KEY` (optional)
 
 ### 3) Run
 

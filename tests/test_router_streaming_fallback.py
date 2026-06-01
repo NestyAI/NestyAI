@@ -100,6 +100,34 @@ async def test_router_stream_fallback_if_first_provider_fails_before_yield() -> 
 
 
 @pytest.mark.asyncio
+async def test_router_stream_fallback_if_first_provider_404_before_yield() -> None:
+    async def fail_before_yield():
+        raise ProviderError(provider="groq", message="not found", retryable=False, status_code=404)
+        yield ProviderStreamChunk(delta="unused")
+
+    async def success_stream():
+        yield ProviderStreamChunk(delta="hi")
+        yield ProviderStreamChunk(finish_reason="stop")
+
+    groq = _DummyStreamProvider("groq", fail_before_yield)
+    openrouter = _DummyStreamProvider("openrouter", success_stream)
+    router = _router_with({"groq": groq, "openrouter": openrouter})
+
+    result = await router.route_chat_stream(
+        request_id="req_stream_404",
+        model_alias="nesty-test",
+        messages=[ChatMessage(role="user", content="hello")],
+        temperature=0.7,
+        max_tokens=64,
+    )
+    chunks = []
+    async for chunk in result.stream:
+        chunks.append(chunk)
+    assert result.provider_used == "openrouter"
+    assert "".join(chunk.delta for chunk in chunks if chunk.delta) == "hi"
+
+
+@pytest.mark.asyncio
 async def test_router_stream_does_not_fallback_mid_stream_after_yield() -> None:
     async def partial_then_fail():
         yield ProviderStreamChunk(delta="partial")

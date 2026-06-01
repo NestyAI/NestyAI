@@ -115,6 +115,11 @@ class ProviderHealthInfo(BaseModel):
     all_targets_skipped: bool = False
 
 
+class OutputSafetyInfo(BaseModel):
+    internal_tool_markup_detected: bool = False
+    internal_tool_markup_removed: bool = False
+
+
 class ChatCompletionResponse(BaseModel):
     id: str
     object: str = "chat.completion"
@@ -129,6 +134,7 @@ class ChatCompletionResponse(BaseModel):
     orchestration: OrchestrationInfo | None = None
     semantic_recall: SemanticRecallInfo | None = None
     provider_health: ProviderHealthInfo | None = None
+    output_safety: OutputSafetyInfo | None = None
     auth: AuthDebugInfo | None = None
     conversation: ConversationInfo | None = None
     model_alias: str | None = None

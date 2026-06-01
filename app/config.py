@@ -33,6 +33,9 @@ class Settings(BaseModel):
     openrouter_api_key: str | None = None
     nvidia_api_key: str | None = None
     nvidia_base_url: str | None = None
+    ollama_api_key: str | None = None
+    ollama_base_url: str = "https://ollama.com"
+    ollama_request_timeout_seconds: float = 60.0
     weather_provider_api_key: str | None = None
     exchange_rate_api_key: str | None = None
     nesty_db_path: str = "data/nesty.db"
@@ -115,6 +118,8 @@ class Settings(BaseModel):
 
     @classmethod
     def from_env(cls) -> "Settings":
+        ollama_base_url_raw = str(os.getenv("OLLAMA_BASE_URL", "https://ollama.com") or "").strip()
+        ollama_base_url = (ollama_base_url_raw or "https://ollama.com").rstrip("/")
         return cls(
             app_name=os.getenv("APP_NAME", "NestyAI"),
             app_version=os.getenv("APP_VERSION", "0.1.0"),
@@ -126,6 +131,9 @@ class Settings(BaseModel):
             openrouter_api_key=os.getenv("OPENROUTER_API_KEY"),
             nvidia_api_key=os.getenv("NVIDIA_API_KEY"),
             nvidia_base_url=os.getenv("NVIDIA_BASE_URL"),
+            ollama_api_key=os.getenv("OLLAMA_API_KEY"),
+            ollama_base_url=ollama_base_url,
+            ollama_request_timeout_seconds=float(os.getenv("OLLAMA_REQUEST_TIMEOUT_SECONDS", "60")),
             weather_provider_api_key=os.getenv("WEATHER_PROVIDER_API_KEY"),
             exchange_rate_api_key=os.getenv("EXCHANGE_RATE_API_KEY"),
             nesty_db_path=os.getenv("NESTY_DB_PATH", "data/nesty.db"),
