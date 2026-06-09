@@ -1999,6 +1999,29 @@
   },
   "components": {
     "schemas": {
+      "AnswerQualityInfo": {
+        "properties": {
+          "checked": {
+            "type": "boolean",
+            "title": "Checked",
+            "default": false
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Flags"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": "none"
+          }
+        },
+        "type": "object",
+        "title": "AnswerQualityInfo"
+      },
       "AuthDebugInfo": {
         "properties": {
           "api_key_id": {
@@ -2251,6 +2274,9 @@
                 "type": "null"
               }
             ]
+          },
+          "answer_quality": {
+            "$ref": "#/components/schemas/AnswerQualityInfo"
           },
           "retrieval": {
             "$ref": "#/components/schemas/RetrievalInfo"

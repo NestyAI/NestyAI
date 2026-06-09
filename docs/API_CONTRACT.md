@@ -186,6 +186,11 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
         "internal_tool_markup_detected": false,
         "internal_tool_markup_removed": false
       },
+      "answer_quality": {
+        "checked": false,
+        "flags": [],
+        "action": "none"
+      },
       "auth": null,
       "conversation": {
         "id": "conv_123",
@@ -204,7 +209,7 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
         *   **Chunk Event**:
             `data: {"id": "...", "object": "chat.completion.chunk", "created": 1234, "model": "...", "provider": "...", "choices": [{"index": 0, "delta": {"content": "part"}, "finish_reason": null}]}`
         *   **Metadata Event**:
-            `data: {"id": "...", "object": "chat.completion.metadata", "created": 1234, "model": "...", "provider": "...", "guard": {...}, "tools": {...}, "sources": [...], "usage": {...}, "orchestration": {...}, "semantic_recall": {...}, "provider_health": {...}, "output_safety": {...}, "conversation": {...}, "model_alias": "..."}`
+            `data: {"id": "...", "object": "chat.completion.metadata", "created": 1234, "model": "...", "provider": "...", "guard": {...}, "tools": {...}, "sources": [...], "usage": {...}, "orchestration": {...}, "semantic_recall": {...}, "provider_health": {...}, "output_safety": {...}, "answer_quality": {...}, "conversation": {...}, "model_alias": "..."}`
         *   **Termination Event**:
             `data: [DONE]`
         *   **Interrupted Stream Error (if interrupted)**:
@@ -473,4 +478,3 @@ Internal endpoints are hidden administrative routes.
 *   `GET /internal/api-keys/{api_key_id}`: Get detail of an API key (omits secrets/hash).
 *   `POST /internal/api-keys/{api_key_id}/revoke`: Idempotently revoke a key (removes usability immediately).
 *   `PATCH /internal/api-keys/{api_key_id}`: Update metadata properties of an API key (name, environment, limits, models).
-

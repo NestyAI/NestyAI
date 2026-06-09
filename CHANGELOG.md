@@ -7,6 +7,16 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.2.2] - Unreleased
+
+### Added
+- Added conservative answer quality guard metadata for empty-answer fallback handling and explicit first-person search-claim detection.
+- Mirrored safe `answer_quality` metadata alongside existing response metadata without changing the chat contract shape.
+
+### Fixed
+- Replaced empty or whitespace-only non-stream assistant output with a safe fallback message after existing safety cleanup.
+- Kept streaming behavior stable by attaching answer-quality metadata only to the final metadata event.
+
 ## [1.2.1] - Unreleased
 
 ### Fixed

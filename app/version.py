@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # Central version constant for NestyAI.
 # Update this before each release. Follows SemVer (major.minor.patch[-pre]).
-VERSION: str = "1.2.1"
+VERSION: str = "1.2.2"
 
 # Short API-level version that clients may depend on for compatibility.
 # Increment the major when backward-incompatible changes are made.

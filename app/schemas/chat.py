@@ -122,6 +122,12 @@ class OutputSafetyInfo(BaseModel):
     internal_tool_markup_removed: bool = False
 
 
+class AnswerQualityInfo(BaseModel):
+    checked: bool = False
+    flags: list[str] = Field(default_factory=list)
+    action: str = "none"
+
+
 class RetrievalInfo(BaseModel):
     context_used: bool = False
     context_sources: list[str] = Field(default_factory=list)
@@ -154,6 +160,7 @@ class ChatCompletionResponse(BaseModel):
     semantic_recall: SemanticRecallInfo | None = None
     provider_health: ProviderHealthInfo | None = None
     output_safety: OutputSafetyInfo | None = None
+    answer_quality: AnswerQualityInfo = Field(default_factory=AnswerQualityInfo)
     retrieval: RetrievalInfo = Field(default_factory=RetrievalInfo)
     auth: AuthDebugInfo | None = None
     conversation: ConversationInfo | None = None

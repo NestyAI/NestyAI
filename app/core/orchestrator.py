@@ -8,6 +8,7 @@ from typing import Any
 from app.config import ModelProfile, ModelsConfig, Settings
 from app.core.internal_tool_markup import sanitize_internal_tool_markup
 from app.core.errors import APIError
+from app.core.answer_quality import evaluate_answer_quality
 from app.core.model_config_loader import get_effective_model_config
 from app.core.model_behavior import apply_behavior_defaults, build_behavior_system_instruction
 from app.core.context_assembler import ContextItem, ContextAssemblyResult, assemble_hybrid_context, build_context_item
@@ -30,6 +31,7 @@ from app.schemas.chat import (
     ConversationInfo,
     GuardInfo,
     OrchestrationInfo,
+    AnswerQualityInfo,
     OutputSafetyInfo,
     ProviderHealthInfo,
     RetrievalInfo,
@@ -65,6 +67,7 @@ class StreamOutcome:
     semantic_recall: SemanticRecallInfo = field(default_factory=SemanticRecallInfo)
     provider_health: ProviderHealthInfo | None = None
     output_safety: OutputSafetyInfo = field(default_factory=OutputSafetyInfo)
+    answer_quality: AnswerQualityInfo = field(default_factory=AnswerQualityInfo)
     retrieval: RetrievalInfo = field(default_factory=RetrievalInfo)
 
 
@@ -282,6 +285,14 @@ class ChatOrchestrator:
                 output_safety.internal_tool_markup_removed = True
             if self.enable_output_guard:
                 response_text, output_guard_info = self.output_guard.scan_text(response_text)
+            response_text, answer_quality = evaluate_answer_quality(
+                response_text,
+                retrieval=retrieval,
+                tools=tools_meta,
+                sources=sources,
+                output_safety=output_safety,
+                streaming=False,
+            )
 
             combined_guard = self._combine_guard_info(input_guard_info, output_guard_info)
             latency_ms = int((time.perf_counter() - started_at) * 1000)
@@ -316,6 +327,7 @@ class ChatOrchestrator:
                 semantic_recall=semantic_recall,
                 provider_health=provider_health_info,
                 output_safety=output_safety,
+                answer_quality=answer_quality,
                 retrieval=retrieval,
                 model_alias=request.model,
             )
@@ -486,6 +498,15 @@ class ChatOrchestrator:
                 outcome.output_safety = stream_output_safety
                 outcome.assistant_content = safe_stream_text
 
+            outcome.assistant_content, outcome.answer_quality = evaluate_answer_quality(
+                outcome.assistant_content,
+                retrieval=outcome.retrieval,
+                tools=outcome.tools,
+                sources=outcome.sources,
+                output_safety=outcome.output_safety,
+                streaming=True,
+            )
+
             outcome.guard = self._combine_guard_info(input_guard_info, output_guard_info)
             outcome.status = "success"
             outcome.error_code = ""
@@ -522,6 +543,7 @@ class ChatOrchestrator:
                     "retrieval": outcome.retrieval.model_dump(),
                     "provider_health": outcome.provider_health.model_dump() if outcome.provider_health else None,
                     "output_safety": outcome.output_safety.model_dump(),
+                    "answer_quality": outcome.answer_quality.model_dump(),
                     "conversation": (
                         ConversationInfo(
                             id=outcome.conversation_id,
