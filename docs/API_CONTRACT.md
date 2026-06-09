@@ -466,3 +466,11 @@ Internal endpoints are hidden administrative routes.
 *   `GET /internal/diagnostics/provider-health/summary`: Reliability & latency summary metrics
 *   `POST /internal/diagnostics/provider-health/check`: Trigger test on alias
 *   `POST /internal/diagnostics/provider-model/check`: Trigger direct provider/model check
+
+### 4. API Keys Management
+*   `GET /internal/api-keys`: List all API keys (supports environment, revoked, limit, offset, q search filters).
+*   `POST /internal/api-keys`: Create an API key (returns the raw API key exactly once in the response).
+*   `GET /internal/api-keys/{api_key_id}`: Get detail of an API key (omits secrets/hash).
+*   `POST /internal/api-keys/{api_key_id}/revoke`: Idempotently revoke a key (removes usability immediately).
+*   `PATCH /internal/api-keys/{api_key_id}`: Update metadata properties of an API key (name, environment, limits, models).
+

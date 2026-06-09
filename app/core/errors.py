@@ -48,6 +48,7 @@ ERROR_CODES = {
     "orchestration_not_available",
     "internal_admin_disabled",
     "internal_admin_unauthorized",
+    "api_key_not_found",
     "model_config_not_found",
     "model_config_invalid",
     "model_config_update_failed",

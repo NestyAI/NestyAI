@@ -39,3 +39,5 @@ tests_tmp/
 # OS files
 .DS_Store
 Thumbs.db
+
+.agents/

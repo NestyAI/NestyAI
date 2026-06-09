@@ -100,3 +100,8 @@ All API errors return a standard JSON structure with HTTP status code matching t
 *   `provider_model_unavailable`: Diagnostics provider check could not find requested model (404).
 *   `rate_limited`: Diagnostics provider check hit upstream rate limit (429).
 *   `provider_timeout`: Diagnostics provider check timed out.
+*   `api_key_not_found`: The requested API key was not found.
+*   `api_key_create_failed`: The API key creation failed.
+*   `api_key_revoke_failed`: The API key revocation failed.
+*   `invalid_api_key_request`: The API key management request parameters were invalid.
+

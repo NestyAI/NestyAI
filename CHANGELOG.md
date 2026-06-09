@@ -7,6 +7,14 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.1.1] - Unreleased
+
+### Added
+- Added internal admin API key management endpoints for creating, listing, inspecting, and revoking Gateway API keys.
+
+### Security
+- Raw API keys are returned only once on creation and are never stored or returned by list/detail endpoints.
+
 ## [1.1.0] - Unreleased
 
 ### Added

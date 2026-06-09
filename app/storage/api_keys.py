@@ -13,9 +13,14 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _parse_allowed_models(raw: str | None) -> list[str] | None:
+def _parse_allowed_models(raw: Any) -> list[str] | None:
     if not raw:
         return None
+    if not isinstance(raw, str):
+        try:
+            raw = str(raw)
+        except Exception:
+            return None
     raw = raw.strip()
     if not raw:
         return None
@@ -185,3 +190,133 @@ def revoke_active_api_keys_by_marker(
         conn.commit()
     return max(0, int(cursor.rowcount))
 
+
+def get_api_key_by_id(db_path: str, key_id: str) -> dict[str, Any] | None:
+    with get_connection(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT id, name, key_hash, key_prefix, environment, is_active, daily_limit, monthly_limit,
+                   allowed_models, created_at, last_used_at, revoked_at
+            FROM api_keys
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (key_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "key_hash": row["key_hash"],
+        "key_prefix": row["key_prefix"],
+        "environment": row["environment"],
+        "is_active": bool(row["is_active"]),
+        "daily_limit": row["daily_limit"],
+        "monthly_limit": row["monthly_limit"],
+        "allowed_models": _parse_allowed_models(row["allowed_models"]),
+        "created_at": row["created_at"],
+        "last_used_at": row["last_used_at"],
+        "revoked_at": row["revoked_at"],
+    }
+
+
+def list_api_keys_filtered(
+    db_path: str,
+    *,
+    environment: str | None = None,
+    revoked: bool | None = None,
+    q: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    try:
+        limit_val = int(limit)
+        if limit_val <= 0 or limit_val > 1000:
+            limit_val = 50
+    except (TypeError, ValueError):
+        limit_val = 50
+
+    try:
+        offset_val = int(offset)
+        if offset_val < 0:
+            offset_val = 0
+    except (TypeError, ValueError):
+        offset_val = 0
+
+    query = """
+        SELECT id, name, key_hash, key_prefix, environment, is_active, daily_limit, monthly_limit,
+               allowed_models, created_at, last_used_at, revoked_at
+        FROM api_keys
+        WHERE 1=1
+    """
+    params: list[Any] = []
+    if environment is not None:
+        query += " AND environment = ?"
+        params.append(environment)
+    if revoked is not None:
+        query += " AND is_active = ?"
+        params.append(0 if revoked else 1)
+    if q is not None:
+        query += " AND (name LIKE ? OR key_prefix LIKE ?)"
+        q_val = f"%{q}%"
+        params.extend([q_val, q_val])
+
+    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit_val, offset_val])
+
+    with get_connection(db_path) as conn:
+        rows = conn.execute(query, tuple(params)).fetchall()
+
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        result.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "key_hash": row["key_hash"],
+                "key_prefix": row["key_prefix"],
+                "environment": row["environment"],
+                "is_active": bool(row["is_active"]),
+                "daily_limit": row["daily_limit"],
+                "monthly_limit": row["monthly_limit"],
+                "allowed_models": _parse_allowed_models(row["allowed_models"]),
+                "created_at": row["created_at"],
+                "last_used_at": row["last_used_at"],
+                "revoked_at": row["revoked_at"],
+            }
+        )
+    return result
+
+
+def update_api_key_record(
+    db_path: str,
+    key_id: str,
+    updates: dict[str, Any],
+) -> dict[str, Any] | None:
+    valid_fields = ["name", "environment", "daily_limit", "monthly_limit", "allowed_models"]
+    fields_to_update = {}
+    for field in valid_fields:
+        if field in updates:
+            val = updates[field]
+            if field == "allowed_models":
+                fields_to_update[field] = json.dumps(val) if val else None
+            else:
+                fields_to_update[field] = val
+
+    if fields_to_update:
+        set_clauses = []
+        params = []
+        for field, val in fields_to_update.items():
+            set_clauses.append(f"{field} = ?")
+            params.append(val)
+        params.append(key_id)
+
+        with get_connection(db_path) as conn:
+            conn.execute(
+                f"UPDATE api_keys SET {', '.join(set_clauses)} WHERE id = ?",
+                tuple(params),
+            )
+            conn.commit()
+
+    return get_api_key_by_id(db_path, key_id)
