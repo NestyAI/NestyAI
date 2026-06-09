@@ -7,7 +7,16 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
-## [1.2.3] - Unreleased
+## [1.2.4] - Unreleased
+
+### Added
+- Added safe, additive orchestration metadata fields to response: `evidence_sources_used`, `planner_metadata_used`, `retrieval_metadata_used`, `quality_guard_applied`, `pro_context_budget_chars`, and `pro_context_truncated`.
+- Integrated dynamic safety guidelines into role prompts based on planner decisions (e.g. clarification needed, memory context sufficient, search planned but not used).
+
+### Changed
+- Optimised context handoff for orchestrator roles: Planner receives compact context source list, Critic receives candidate draft and verification checklist, Researcher receives full context, and Finalizer receives size-capped planner/critic notes and candidate draft answer.
+
+## [1.2.3] - 2026-06-10
 
 ### Added
 - Added safe planner metadata for search and tool decisions, including additive clarification signals.

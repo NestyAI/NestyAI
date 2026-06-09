@@ -146,6 +146,8 @@ class ChatOrchestrator:
                 tools_meta=tools_meta,
                 sources=sources,
             )
+            context_metadata["retrieval"] = retrieval
+            context_metadata["planner"] = planner
             decision = should_use_orchestration(
                 model_alias=request.model,
                 request=request,
@@ -191,6 +193,10 @@ class ChatOrchestrator:
                     mode_val = "full" if is_full else "reduced"
                     skipped_roles = [r for r in all_possible_roles if r not in synthesis.roles]
                     
+                    evidence_sources_used = retrieval.context_sources if retrieval else []
+                    pro_context_budget_chars = retrieval.context_budget_chars if retrieval else None
+                    pro_context_truncated = retrieval.context_truncated if retrieval else None
+
                     orchestration = OrchestrationInfo(
                         enabled=bool(decision.get("enabled")),
                         requested=str(decision.get("requested") or request.orchestration),
@@ -209,6 +215,12 @@ class ChatOrchestrator:
                         role_latency_ms=synthesis.role_latency_ms or None,
                         total_latency_ms=orch_elapsed,
                         reason=None,
+                        evidence_sources_used=evidence_sources_used,
+                        planner_metadata_used=planner is not None,
+                        retrieval_metadata_used=retrieval is not None,
+                        quality_guard_applied=True,
+                        pro_context_budget_chars=pro_context_budget_chars,
+                        pro_context_truncated=pro_context_truncated,
                     )
                     orchestration = self._sanitize_orchestration_metadata(orchestration)
                 except MultiModelOrchestrationError as exc:
@@ -1482,6 +1494,12 @@ class ChatOrchestrator:
             role_latency_ms=role_latency_ms,
             total_latency_ms=total_latency_ms,
             reason=info.reason,
+            evidence_sources_used=info.evidence_sources_used,
+            planner_metadata_used=info.planner_metadata_used,
+            retrieval_metadata_used=info.retrieval_metadata_used,
+            quality_guard_applied=info.quality_guard_applied,
+            pro_context_budget_chars=info.pro_context_budget_chars,
+            pro_context_truncated=info.pro_context_truncated,
         )
 
     @staticmethod

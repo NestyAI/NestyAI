@@ -83,6 +83,12 @@ class OrchestrationInfo(BaseModel):
     fallback_reason: str | None = None
     streaming_fallback: bool = False
     total_latency_ms: int | None = None
+    evidence_sources_used: list[str] | None = None
+    planner_metadata_used: bool | None = None
+    retrieval_metadata_used: bool | None = None
+    quality_guard_applied: bool | None = None
+    pro_context_budget_chars: int | None = None
+    pro_context_truncated: bool | None = None
 
 
 class SemanticRecallInfo(BaseModel):

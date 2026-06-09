@@ -174,7 +174,13 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
         "skipped_roles": ["planner", "researcher", "critic", "finalizer"],
         "fallback_reason": null,
         "streaming_fallback": false,
-        "total_latency_ms": null
+        "total_latency_ms": null,
+        "evidence_sources_used": null,
+        "planner_metadata_used": null,
+        "retrieval_metadata_used": null,
+        "quality_guard_applied": null,
+        "pro_context_budget_chars": null,
+        "pro_context_truncated": null
       },
       "semantic_recall": {
         "enabled": false,

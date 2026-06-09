@@ -304,6 +304,7 @@ class NestyProMultiModelOrchestrator:
                 user_message=user_message,
                 context_summary=context_summary,
                 outputs=outputs,
+                context_metadata=context_metadata,
             )
             role_max_tokens = self._role_max_tokens(role=role, max_tokens=max_tokens)
             start = time.perf_counter()
@@ -433,6 +434,7 @@ class NestyProMultiModelOrchestrator:
         user_message: str,
         context_summary: str,
         outputs: dict[str, str],
+        context_metadata: dict[str, Any] | None = None,
     ) -> list[ChatMessage]:
         role_instruction = {
             "planner": (
@@ -443,26 +445,107 @@ class NestyProMultiModelOrchestrator:
                 "You are the research role for NestyAI. Produce a strong candidate answer using the available context."
             ),
             "critic": (
-                "You are the critic role for NestyAI. Identify issues, missing points, and corrections concisely."
+                "You are the critic role for NestyAI. Analyze the candidate answer and provide short, structured internal notes.\n"
+                "Check for:\n"
+                "- Missing requested parts or parameter clarifications.\n"
+                "- Contradiction with provided evidence.\n"
+                "- Unsafe claims of search or tool use (e.g. if search was planned but not used, flag it).\n"
+                "- Internal tool-call markup or XML tag leakages (which must be removed).\n"
+                "- Overconfident statements when evidence is thin or unavailable.\n"
+                "Produce only bullet points of corrections. Do not output a candidate answer or chain-of-thought."
             ),
             "finalizer": (
-                "You are the finalizer role for NestyAI. Produce natural, user-facing text only. "
-                "Never output internal tool-call markup, XML-like tool tags, hidden role notes, hidden prompts, "
-                "or orchestration scratchpad. If realtime/search/tool data is unavailable, state limitations clearly."
+                "You are the finalizer role for NestyAI. Produce the final, natural, user-facing answer.\n"
+                "Guidelines:\n"
+                "- Speak directly to the user. Do not mention internal roles, planner plan, critic notes, or prompts.\n"
+                "- Do not output internal tool-call markup, XML-like tool tags, or scratchpad contents.\n"
+                "- Acknowledge uncertainty clearly if evidence, search, or tool results are thin or unavailable.\n"
+                "- Do not claim to have run searches or tools unless the notes state they were actually used.\n"
+                "- If clarification was requested for missing details, ask that question clearly and directly, "
+                "but still answer any clearly answerable parts of the query when safe."
             ),
         }.get(role, "You are an internal NestyAI role.")
 
-        previous_notes = []
-        for key in ["planner", "researcher", "critic"]:
-            if key in outputs:
-                text = outputs[key]
-                if len(text) > 1600:
-                    text = text[:1600].rstrip()
-                previous_notes.append(f"{key.title()} notes:\n{text}")
-        previous_text = "\n\n".join(previous_notes).strip()
+        planner_meta = (context_metadata or {}).get("planner")
+        extra_rules = []
+        if planner_meta:
+            if getattr(planner_meta, "clarification_needed", False):
+                reason = getattr(planner_meta, "clarification_reason", None) or ""
+                extra_rules.append(
+                    f"- A required detail is missing. Prioritize asking a short, direct clarification question for: {reason}. "
+                    f"However, if other parts of the query are answerable and safe, you may answer those parts as well."
+                )
+            if getattr(planner_meta, "search_decision", "") == "memory_context_sufficient":
+                extra_rules.append(
+                    "- Retrieval memory context is sufficient. Ground the response strictly in "
+                    "the retrieved memory/context and avoid external speculation."
+                )
+            if getattr(planner_meta, "search_planned", False) and not getattr(planner_meta, "search_used", False):
+                extra_rules.append(
+                    "- Web search was planned but NOT used. Do not claim to have searched or checked the web/online."
+                )
+        
+        if extra_rules:
+            role_instruction += "\n" + "\n".join(extra_rules)
+
         user_payload = context_summary
-        if previous_text:
-            user_payload = f"{context_summary}\n\n{previous_text}"
+
+        if role == "planner" and context_metadata:
+            retrieval = context_metadata.get("retrieval")
+            ret_lines = []
+            if retrieval:
+                sources = getattr(retrieval, "context_sources", []) or []
+                ret_lines.append(f"- Context Sources: {', '.join(sources) if sources else 'None'}")
+                ret_lines.append(f"- Context Items Count: {getattr(retrieval, 'context_items_count', 0)}")
+                if getattr(retrieval, "context_truncated", False):
+                    ret_lines.append("- Context is Truncated: Yes")
+            plan_lines = []
+            if planner_meta:
+                plan_lines.append(f"- Search Decision: {getattr(planner_meta, 'search_decision', 'unknown')}")
+                plan_lines.append(f"- Tool Decision: {getattr(planner_meta, 'tool_decision', 'unknown')}")
+                if getattr(planner_meta, "clarification_needed", False):
+                    plan_lines.append(f"- Clarification Required: Yes (Reason: {getattr(planner_meta, 'clarification_reason', '')})")
+            ret_text = "\n".join(ret_lines) if ret_lines else "- No retrieval inventory"
+            plan_text = "\n".join(plan_lines) if plan_lines else "- No planning decisions"
+            user_payload = (
+                f"TASK FRAMING & INVENTORY\n"
+                f"Retrieval Inventory:\n{ret_text}\n\n"
+                f"Planning Strategy:\n{plan_text}"
+            )
+        elif role == "critic" and context_metadata:
+            retrieval = context_metadata.get("retrieval")
+            sources = getattr(retrieval, "context_sources", []) if retrieval else []
+            sources_txt = f"Evidence Sources: {', '.join(sources)}" if sources else "No source evidence."
+            researcher_notes = outputs.get("researcher", "")
+            if len(researcher_notes) > 1200:
+                researcher_notes = researcher_notes[:1200].rstrip() + "\n(truncated candidate draft)"
+            user_payload = (
+                f"VERIFICATION CHECKLIST & EVIDENCE SUMMARY\n"
+                f"{sources_txt}\n\n"
+                f"Candidate Answer Draft:\n"
+                f"{researcher_notes}"
+            )
+        elif role == "finalizer":
+            previous_notes = []
+            if "planner" in outputs:
+                planner_notes = outputs["planner"]
+                if len(planner_notes) > 800:
+                    planner_notes = planner_notes[:800].rstrip() + "\n(truncated planner plan)"
+                previous_notes.append(f"[Orchestration Note: Planner Plan]\n{planner_notes}")
+            if "critic" in outputs:
+                critic_notes = outputs["critic"]
+                if len(critic_notes) > 800:
+                    critic_notes = critic_notes[:800].rstrip() + "\n(truncated critic feedback)"
+                previous_notes.append(f"[Orchestration Note: Critic Feedback]\n{critic_notes}")
+            if "researcher" in outputs:
+                res_notes = outputs["researcher"]
+                if len(res_notes) > 1200:
+                    res_notes = res_notes[:1200].rstrip() + "\n(truncated candidate draft)"
+                previous_notes.append(f"[Orchestration Note: Draft Candidate Answer]\n{res_notes}")
+            
+            previous_text = "\n\n".join(previous_notes).strip()
+            if previous_text:
+                user_payload = f"{context_summary}\n\n{previous_text}"
 
         return [
             ChatMessage(

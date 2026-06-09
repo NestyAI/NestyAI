@@ -3147,6 +3147,75 @@
               }
             ],
             "title": "Total Latency Ms"
+          },
+          "evidence_sources_used": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Sources Used"
+          },
+          "planner_metadata_used": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planner Metadata Used"
+          },
+          "retrieval_metadata_used": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Metadata Used"
+          },
+          "quality_guard_applied": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Guard Applied"
+          },
+          "pro_context_budget_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pro Context Budget Chars"
+          },
+          "pro_context_truncated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pro Context Truncated"
           }
         },
         "type": "object",
