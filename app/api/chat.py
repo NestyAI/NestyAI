@@ -314,6 +314,8 @@ def _trim_history_messages(messages: list[dict], max_chars: int) -> list[ChatMes
     selected: list[ChatMessage] = []
     total_chars = 0
     for item in reversed(messages):
+        if bool(item.get("memory_excluded")):
+            continue
         role = str(item.get("role", ""))
         if role not in {"system", "user", "assistant", "tool"}:
             continue
@@ -388,6 +390,7 @@ def _prepare_conversation_context(
     conversation_id = request.conversation_id
     conversation_created = False
     conversation_summary_used = False
+    conversation_history_used = False
     history_messages: list[ChatMessage] = []
 
     if conversation_id:
@@ -425,6 +428,7 @@ def _prepare_conversation_context(
                     db_path=settings.nesty_db_path,
                 )
                 history_messages = _trim_history_messages(history_rows, max_chars)
+            conversation_history_used = bool(history_messages)
     else:
         created = create_conversation(
             api_key_id=auth_context.api_key_id if auth_context else None,
@@ -441,12 +445,13 @@ def _prepare_conversation_context(
             "messages": merged_messages,
             "conversation_id": conversation_id,
             "conversation_created": conversation_created,
-            "conversation_summary_mode": summary_mode,
-            "conversation_summary_used": conversation_summary_used,
-            "conversation_summary_updated": False,
-            "request_api_key_id": request_api_key_id,
-        }
-    )
+                "conversation_summary_mode": summary_mode,
+                "conversation_summary_used": conversation_summary_used,
+                "conversation_summary_updated": False,
+                "conversation_history_used": conversation_history_used,
+                "request_api_key_id": request_api_key_id,
+            }
+        )
     return (
         request_with_memory,
         conversation_id,

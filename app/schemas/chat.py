@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.tools import SourceItem, ToolMetadata
 
+
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
     content: str
@@ -25,6 +26,7 @@ class ChatCompletionRequest(BaseModel):
     store: bool = False
     summary: str = "auto"
     request_api_key_id: str | None = Field(default=None, exclude=True)
+    conversation_history_used: bool = Field(default=False, exclude=True)
     conversation_created: bool = Field(default=False, exclude=True)
     conversation_summary_used: bool = Field(default=False, exclude=True)
     conversation_summary_updated: bool = Field(default=False, exclude=True)
@@ -120,6 +122,23 @@ class OutputSafetyInfo(BaseModel):
     internal_tool_markup_removed: bool = False
 
 
+class RetrievalInfo(BaseModel):
+    context_used: bool = False
+    context_sources: list[str] = Field(default_factory=list)
+    context_items_count: int = 0
+    context_truncated: bool = False
+    context_budget_chars: int = 0
+    context_used_chars: int = 0
+    summary_used: bool = False
+    pinned_memory_used: bool = False
+    fts_used: bool = False
+    semantic_recall_used: bool = False
+    search_used: bool = False
+    tools_used: list[str] = Field(default_factory=list)
+    retrieval_decision: str = "none"
+    retrieval_reason: str | None = None
+
+
 class ChatCompletionResponse(BaseModel):
     id: str
     object: str = "chat.completion"
@@ -135,6 +154,7 @@ class ChatCompletionResponse(BaseModel):
     semantic_recall: SemanticRecallInfo | None = None
     provider_health: ProviderHealthInfo | None = None
     output_safety: OutputSafetyInfo | None = None
+    retrieval: RetrievalInfo = Field(default_factory=RetrievalInfo)
     auth: AuthDebugInfo | None = None
     conversation: ConversationInfo | None = None
     model_alias: str | None = None

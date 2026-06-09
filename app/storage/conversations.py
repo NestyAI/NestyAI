@@ -715,6 +715,8 @@ def search_messages(
     limit: int = 20,
     offset: int = 0,
     backend: str = "auto",
+    conversation_id: str | None = None,
+    exclude_memory_excluded: bool = True,
     db_path: str | None = None,
 ) -> dict[str, Any]:
     backend_mode = str(backend or "auto").strip().lower()
@@ -727,6 +729,8 @@ def search_messages(
             query=query,
             limit=limit,
             offset=offset,
+            conversation_id=conversation_id,
+            exclude_memory_excluded=exclude_memory_excluded,
             db_path=db_path,
         )
         return {
@@ -743,6 +747,8 @@ def search_messages(
             query=query,
             limit=limit,
             offset=offset,
+            conversation_id=conversation_id,
+            exclude_memory_excluded=exclude_memory_excluded,
             db_path=db_path,
         )
         return {
@@ -759,6 +765,8 @@ def search_messages(
             query=query,
             limit=limit,
             offset=offset,
+            conversation_id=conversation_id,
+            exclude_memory_excluded=exclude_memory_excluded,
             db_path=db_path,
         )
         return {
@@ -773,6 +781,8 @@ def search_messages(
             query=query,
             limit=limit,
             offset=offset,
+            conversation_id=conversation_id,
+            exclude_memory_excluded=exclude_memory_excluded,
             db_path=db_path,
         )
         return {
@@ -787,6 +797,8 @@ def _search_messages_like(
     query: str,
     limit: int,
     offset: int,
+    conversation_id: str | None = None,
+    exclude_memory_excluded: bool = True,
     db_path: str | None = None,
 ) -> list[dict[str, Any]]:
     sql = """
@@ -798,6 +810,9 @@ def _search_messages_like(
             m.model,
             m.provider,
             m.token_count,
+            m.memory_pinned,
+            m.memory_excluded,
+            m.memory_tags,
             m.created_at,
             m.metadata,
             c.title AS conversation_title
@@ -811,6 +826,11 @@ def _search_messages_like(
     else:
         sql += " AND c.api_key_id = ?"
         params.append(api_key_id)
+    if conversation_id:
+        sql += " AND m.conversation_id = ?"
+        params.append(conversation_id)
+    if exclude_memory_excluded:
+        sql += " AND COALESCE(m.memory_excluded, 0) = 0"
     like_value = f"%{query}%"
     sql += " AND (m.content LIKE ? OR c.title LIKE ?)"
     params.extend([like_value, like_value])
@@ -833,6 +853,9 @@ def _search_messages_like(
             "rank": None,
             "snippet": None,
             "search_backend": "like",
+            "memory_pinned": bool(int(row["memory_pinned"] or 0)) if "memory_pinned" in row.keys() else False,
+            "memory_excluded": bool(int(row["memory_excluded"] or 0)) if "memory_excluded" in row.keys() else False,
+            "memory_tags": _parse_memory_tags(row["memory_tags"]) if "memory_tags" in row.keys() else [],
             "metadata": _parse_metadata(row["metadata"]),
         }
         for row in rows
@@ -1048,6 +1071,8 @@ def _search_messages_fts(
     query: str,
     limit: int,
     offset: int,
+    conversation_id: str | None = None,
+    exclude_memory_excluded: bool = True,
     db_path: str | None = None,
 ) -> list[dict[str, Any]]:
     if not init_conversation_fts(_effective_db_path(db_path)):
@@ -1063,6 +1088,9 @@ def _search_messages_fts(
             m.model,
             m.provider,
             m.token_count,
+            m.memory_pinned,
+            m.memory_excluded,
+            m.memory_tags,
             m.created_at,
             m.metadata,
             c.title AS conversation_title,
@@ -1079,6 +1107,11 @@ def _search_messages_fts(
     else:
         sql += " AND c.api_key_id = ?"
         params.append(api_key_id)
+    if conversation_id:
+        sql += " AND m.conversation_id = ?"
+        params.append(conversation_id)
+    if exclude_memory_excluded:
+        sql += " AND COALESCE(m.memory_excluded, 0) = 0"
     sql += " ORDER BY rank ASC, m.created_at DESC LIMIT ? OFFSET ?"
     params.extend([max(1, int(limit)), max(0, int(offset))])
 
@@ -1099,6 +1132,9 @@ def _search_messages_fts(
             "rank": float(row["rank"]) if row["rank"] is not None else None,
             "snippet": str(row["snippet"] or ""),
             "search_backend": "fts",
+            "memory_pinned": bool(int(row["memory_pinned"] or 0)),
+            "memory_excluded": bool(int(row["memory_excluded"] or 0)),
+            "memory_tags": _parse_memory_tags(row["memory_tags"]),
             "metadata": _parse_metadata(row["metadata"]),
         }
         for row in rows

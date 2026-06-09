@@ -110,6 +110,7 @@ def test_chat_contract_success_shape(client, monkeypatch) -> None:
     assert "guard" in payload
     assert "tools" in payload
     assert "sources" in payload
+    assert "retrieval" in payload
 
 
 def test_chat_invalid_model_returns_invalid_model(client) -> None:

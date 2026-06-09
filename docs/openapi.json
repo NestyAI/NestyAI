@@ -2133,6 +2133,11 @@
             ],
             "title": "Request Api Key Id"
           },
+          "conversation_history_used": {
+            "type": "boolean",
+            "title": "Conversation History Used",
+            "default": false
+          },
           "conversation_created": {
             "type": "boolean",
             "title": "Conversation Created",
@@ -2246,6 +2251,9 @@
                 "type": "null"
               }
             ]
+          },
+          "retrieval": {
+            "$ref": "#/components/schemas/RetrievalInfo"
           },
           "auth": {
             "anyOf": [
@@ -3272,6 +3280,92 @@
           "model"
         ],
         "title": "ProviderModelCheckRequest"
+      },
+      "RetrievalInfo": {
+        "properties": {
+          "context_used": {
+            "type": "boolean",
+            "title": "Context Used",
+            "default": false
+          },
+          "context_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Context Sources"
+          },
+          "context_items_count": {
+            "type": "integer",
+            "title": "Context Items Count",
+            "default": 0
+          },
+          "context_truncated": {
+            "type": "boolean",
+            "title": "Context Truncated",
+            "default": false
+          },
+          "context_budget_chars": {
+            "type": "integer",
+            "title": "Context Budget Chars",
+            "default": 0
+          },
+          "context_used_chars": {
+            "type": "integer",
+            "title": "Context Used Chars",
+            "default": 0
+          },
+          "summary_used": {
+            "type": "boolean",
+            "title": "Summary Used",
+            "default": false
+          },
+          "pinned_memory_used": {
+            "type": "boolean",
+            "title": "Pinned Memory Used",
+            "default": false
+          },
+          "fts_used": {
+            "type": "boolean",
+            "title": "Fts Used",
+            "default": false
+          },
+          "semantic_recall_used": {
+            "type": "boolean",
+            "title": "Semantic Recall Used",
+            "default": false
+          },
+          "search_used": {
+            "type": "boolean",
+            "title": "Search Used",
+            "default": false
+          },
+          "tools_used": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tools Used"
+          },
+          "retrieval_decision": {
+            "type": "string",
+            "title": "Retrieval Decision",
+            "default": "none"
+          },
+          "retrieval_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Reason"
+          }
+        },
+        "type": "object",
+        "title": "RetrievalInfo"
       },
       "SearchToolMetadata": {
         "properties": {

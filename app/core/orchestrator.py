@@ -10,12 +10,11 @@ from app.core.internal_tool_markup import sanitize_internal_tool_markup
 from app.core.errors import APIError
 from app.core.model_config_loader import get_effective_model_config
 from app.core.model_behavior import apply_behavior_defaults, build_behavior_system_instruction
+from app.core.context_assembler import ContextItem, ContextAssemblyResult, assemble_hybrid_context, build_context_item
 from app.core.multi_model_orchestrator import NestyProMultiModelOrchestrator, should_use_orchestration, MultiModelOrchestrationError
 from app.core.prompt_builder import (
     append_behavior_instruction,
-    append_external_context,
-    append_semantic_recall_context,
-    append_tool_context,
+    append_retrieval_context,
     ensure_system_message,
 )
 from app.core.router import ProviderRouter
@@ -33,6 +32,7 @@ from app.schemas.chat import (
     OrchestrationInfo,
     OutputSafetyInfo,
     ProviderHealthInfo,
+    RetrievalInfo,
     SemanticRecallInfo,
     Usage,
 )
@@ -65,6 +65,7 @@ class StreamOutcome:
     semantic_recall: SemanticRecallInfo = field(default_factory=SemanticRecallInfo)
     provider_health: ProviderHealthInfo | None = None
     output_safety: OutputSafetyInfo = field(default_factory=OutputSafetyInfo)
+    retrieval: RetrievalInfo = field(default_factory=RetrievalInfo)
 
 
 @dataclass
@@ -126,7 +127,7 @@ class ChatOrchestrator:
 
         started_at = time.perf_counter()
         tools_mode = self._normalize_and_validate_request(request)
-        messages, input_guard_info, tools_meta, sources, semantic_recall = await self._prepare_chat_context(
+        messages, input_guard_info, tools_meta, sources, semantic_recall, retrieval = await self._prepare_chat_context(
             request_id=request_id,
             request=request,
             tools_mode=tools_mode,
@@ -315,6 +316,7 @@ class ChatOrchestrator:
                 semantic_recall=semantic_recall,
                 provider_health=provider_health_info,
                 output_safety=output_safety,
+                retrieval=retrieval,
                 model_alias=request.model,
             )
         except APIError as exc:
@@ -342,7 +344,7 @@ class ChatOrchestrator:
             )
         request = request.model_copy(update=apply_behavior_defaults(request, model_profile_obj.model_dump()))
         tools_mode = self._normalize_and_validate_request(request)
-        messages, input_guard_info, tools_meta, sources, semantic_recall = await self._prepare_chat_context(
+        messages, input_guard_info, tools_meta, sources, semantic_recall, retrieval = await self._prepare_chat_context(
             request_id=request_id,
             request=request,
             tools_mode=tools_mode,
@@ -382,6 +384,7 @@ class ChatOrchestrator:
             conversation_summary_updated=request.conversation_summary_updated if request.store else False,
             orchestration=self._orchestration_info_from_decision(decision),
             semantic_recall=semantic_recall,
+            retrieval=retrieval,
             provider_health=(
                 ProviderHealthInfo.model_validate(getattr(stream_result, "provider_health"))
                 if isinstance(getattr(stream_result, "provider_health", None), dict)
@@ -516,6 +519,7 @@ class ChatOrchestrator:
                     "usage": outcome.usage.model_dump(),
                     "orchestration": outcome.orchestration.model_dump(),
                     "semantic_recall": outcome.semantic_recall.model_dump(),
+                    "retrieval": outcome.retrieval.model_dump(),
                     "provider_health": outcome.provider_health.model_dump() if outcome.provider_health else None,
                     "output_safety": outcome.output_safety.model_dump(),
                     "conversation": (
@@ -581,7 +585,7 @@ class ChatOrchestrator:
         request_id: str,
         request: ChatCompletionRequest,
         tools_mode: str | list[str],
-    ) -> tuple[list[ChatMessage], GuardInfo, ToolMetadata, list[SourceItem], SemanticRecallInfo]:
+    ) -> tuple[list[ChatMessage], GuardInfo, ToolMetadata, list[SourceItem], SemanticRecallInfo, RetrievalInfo]:
         model_profile = self._resolve_model_profile(request.model)
         if not model_profile:
             raise APIError(
@@ -597,6 +601,7 @@ class ChatOrchestrator:
         input_guard_info = GuardInfo()
         tools_meta = ToolMetadata()
         sources: list[SourceItem] = []
+        retrieval_items: list[ContextItem] = []
         semantic_recall_info = SemanticRecallInfo(
             enabled=bool(getattr(self.settings, "semantic_recall_enabled", False)),
             requested=str(request.semantic_recall or "auto"),
@@ -614,11 +619,20 @@ class ChatOrchestrator:
             candidate_count=0,
             used_context_chars=0,
         )
+        summary_text = ""
 
         if self.enable_input_guard:
             messages, input_guard_info = self.input_guard.scan_messages(messages)
 
         latest_user_message = self._latest_user_message(messages)
+        for item in messages:
+            if item.role != "system":
+                continue
+            if "Conversation summary so far" not in item.content:
+                continue
+            summary_text = item.content[:4000]
+            break
+
         semantic_decision = should_use_semantic_recall(
             request=request,
             model_config=model_profile_dict,
@@ -644,14 +658,6 @@ class ChatOrchestrator:
         )
         if semantic_decision.get("should_use"):
             exclude_message_ids: list[str] = []
-            summary_text = ""
-            for item in messages:
-                if item.role != "system":
-                    continue
-                if "Conversation summary so far" not in item.content:
-                    continue
-                summary_text = item.content[:4000]
-                break
             if bool(getattr(self.settings, "semantic_recall_exclude_current_conversation_recent", True)):
                 conversation_id = str(request.conversation_id or "").strip()
                 if conversation_id:
@@ -669,10 +675,10 @@ class ChatOrchestrator:
                     conversation_id=request.conversation_id,
                     config=self.settings,
                     request_semantic_recall=request.semantic_recall,
-                    exclude_message_ids=exclude_message_ids,
-                    summary_text=summary_text,
-                    include_pinned_boost=True,
-                )
+                exclude_message_ids=exclude_message_ids,
+                summary_text=summary_text,
+                include_pinned_boost=True,
+            )
             except Exception:
                 recall_result = {
                     "enabled": bool(semantic_decision.get("enabled")),
@@ -693,27 +699,8 @@ class ChatOrchestrator:
                     "used_context_chars": 0,
                 }
             matches = list(recall_result.get("matches") or [])
-            context_text = str(recall_result.get("context_text") or "").strip()
-            if recall_result.get("used") and context_text:
-                # Treat semantic memory as untrusted contextual data, same as external context safety path.
-                context_sanitized, _meta = self.context_guard.sanitize_external_context(
-                    search_results=[
-                        SearchResult(
-                            title=f"Memory {idx + 1}",
-                            url=f"memory://{item.get('message_id') or item.get('conversation_id') or idx}",
-                            snippet=str(item.get("content") or ""),
-                        )
-                        for idx, item in enumerate(matches)
-                    ],
-                    max_context_chars=max(1, int(getattr(self.settings, "semantic_recall_max_context_chars", 4000))),
-                )
-                if context_sanitized:
-                    rebuilt_context = self._rebuild_memory_context(matches, context_sanitized)
-                    final_context = rebuilt_context or context_text
-                    messages = append_semantic_recall_context(messages, final_context)
-                else:
-                    final_context = context_text
-                    messages = append_semantic_recall_context(messages, final_context)
+            if recall_result.get("used") and matches:
+                retrieval_items.extend(self._build_semantic_recall_items(matches))
                 semantic_recall_info = SemanticRecallInfo(
                     enabled=bool(recall_result.get("enabled")),
                     requested=str(recall_result.get("requested") or request.semantic_recall or "auto"),
@@ -737,7 +724,7 @@ class ChatOrchestrator:
                     ),
                     scope=str(recall_result.get("scope") or semantic_recall_info.scope),
                     candidate_count=int(recall_result.get("candidate_count") or 0),
-                    used_context_chars=len(final_context),
+                    used_context_chars=int(recall_result.get("used_context_chars") or 0),
                 )
             else:
                 semantic_recall_info = SemanticRecallInfo(
@@ -766,8 +753,31 @@ class ChatOrchestrator:
                     used_context_chars=int(recall_result.get("used_context_chars") or 0),
                 )
 
-        messages, search_sources, search_used_tools = await self._maybe_apply_search_context(
-            messages=messages,
+        fts_context_items: list[ContextItem] = []
+        fts_used = False
+        if self._should_use_memory_fts(request, latest_user_message):
+            try:
+                from app.storage.conversations import search_messages
+
+                fts_result = search_messages(
+                    api_key_id=request.request_api_key_id,
+                    query=latest_user_message,
+                    limit=max(1, int(getattr(self.settings, "conversation_history_max_messages", 20))),
+                    offset=0,
+                    backend="auto",
+                    conversation_id=str(request.conversation_id or "").strip() or None,
+                    exclude_memory_excluded=True,
+                    db_path=getattr(self.settings, "nesty_db_path", None),
+                )
+                fts_rows = list(fts_result.get("data") or [])
+                fts_used = bool(fts_rows)
+                if fts_rows:
+                    fts_context_items = self._build_memory_search_items(fts_rows)
+            except Exception:
+                fts_context_items = []
+                fts_used = False
+
+        search_sources, search_used_tools, search_context_items = await self._maybe_apply_search_context(
             request=request,
             latest_user_message=latest_user_message,
             model_profile=model_profile_dict,
@@ -776,13 +786,15 @@ class ChatOrchestrator:
         )
         sources.extend(search_sources)
         tools_meta.used.extend(search_used_tools)
+        retrieval_items.extend(search_context_items)
+        retrieval_items.extend(fts_context_items)
 
         planned_tools = self._plan_tools(
             message=latest_user_message,
             model_profile=model_profile_dict,
             tools_mode=tools_mode,
         )
-        tool_context_text, tool_sources, tool_used, executions = await self._execute_planned_tools(
+        tool_sources, tool_used, executions, tool_context_items = await self._execute_planned_tools(
             message=latest_user_message,
             planned_tools=planned_tools,
             tools_mode=tools_mode,
@@ -792,10 +804,28 @@ class ChatOrchestrator:
         tools_meta.used.extend(tool_used)
         tools_meta.executions = executions
         sources.extend(tool_sources)
-        if tool_context_text:
-            messages = append_tool_context(messages, tool_context_text)
+        retrieval_items.extend(tool_context_items)
 
-        return messages, input_guard_info, tools_meta, sources, semantic_recall_info
+        assembly = assemble_hybrid_context(
+            retrieval_items,
+            summary_text=summary_text,
+            budget_chars=max(1, int(model_profile_dict.get("max_context_chars", 6000))),
+        )
+        if assembly.context_text:
+            messages = append_retrieval_context(messages, assembly.context_text)
+
+        retrieval_info = self._build_retrieval_info(
+            request=request,
+            assembly=assembly,
+            semantic_recall_info=semantic_recall_info,
+            summary_text=summary_text,
+            search_used=bool(search_context_items),
+            fts_used=fts_used,
+            tool_context_used=bool(tool_context_items),
+            tools_meta=tools_meta,
+        )
+
+        return messages, input_guard_info, tools_meta, sources, semantic_recall_info, retrieval_info
 
     def _normalize_tools_mode(self, tools_field: str | list[str]) -> str | list[str]:
         if isinstance(tools_field, str):
@@ -825,23 +855,23 @@ class ChatOrchestrator:
 
     async def _maybe_apply_search_context(
         self,
-        messages: list[ChatMessage],
         request: ChatCompletionRequest,
         latest_user_message: str,
         model_profile: dict[str, Any],
         tools_meta: ToolMetadata,
         request_id: str,
-    ) -> tuple[list[ChatMessage], list[SourceItem], list[str]]:
+    ) -> tuple[list[SourceItem], list[str], list[ContextItem]]:
         use_search = should_use_search(
             latest_user_message,
             model_profile,
             explicit_search_mode=request.search,
         )
         if not use_search:
-            return messages, [], []
+            return [], [], []
 
         search_sources: list[SourceItem] = []
         used_tools: list[str] = ["current_datetime", "web_search"]
+        context_items: list[ContextItem] = []
         tools_meta.search.enabled = True
         tools_meta.search.query = latest_user_message
         datetime_context = self._get_current_datetime_context()
@@ -867,9 +897,16 @@ class ChatOrchestrator:
             if context_text:
                 if datetime_context:
                     context_text = f"{datetime_context}\n\n{context_text}"
-                messages = append_external_context(messages, context_text)
                 search_sources.extend(
                     [SourceItem(title=item.title, url=item.url, snippet=item.snippet) for item in search_results]
+                )
+                context_items.append(
+                    build_context_item(
+                        source="search",
+                        content=context_text,
+                        title="Web search context",
+                        metadata={"result_count": len(search_results)},
+                    )
                 )
             log_safe(
                 self.logger,
@@ -882,15 +919,19 @@ class ChatOrchestrator:
                 sources_count=context_meta.sources_count,
             )
         elif search_failed and request.search == "auto":
-            messages = append_external_context(
-                messages,
-                (
-                    f"{datetime_context}\n\n[Search Notice]\nCurrent information could not be retrieved from web search. "
-                    "Answer using existing knowledge and clearly mention possible uncertainty."
-                ),
+            context_items.append(
+                build_context_item(
+                    source="search",
+                    content=(
+                        f"{datetime_context}\n\n[Search Notice]\nCurrent information could not be retrieved from web search. "
+                        "Answer using existing knowledge and clearly mention possible uncertainty."
+                    ),
+                    title="Search notice",
+                    metadata={"failed": True},
+                )
             )
 
-        return messages, search_sources, used_tools
+        return search_sources, used_tools, context_items
 
     def _plan_tools(
         self,
@@ -911,14 +952,14 @@ class ChatOrchestrator:
         tools_mode: str | list[str],
         model_alias: str,
         request_id: str,
-    ) -> tuple[str, list[SourceItem], list[str], list[ToolExecutionMetadata]]:
+    ) -> tuple[list[SourceItem], list[str], list[ToolExecutionMetadata], list[ContextItem]]:
         if not planned_tools:
-            return "", [], [], []
+            return [], [], [], []
 
         sources: list[SourceItem] = []
         used: list[str] = []
         executions: list[ToolExecutionMetadata] = []
-        context_blocks: list[str] = []
+        context_items: list[ContextItem] = []
 
         for tool_name in planned_tools:
             result = await self.tool_registry.execute_tool(
@@ -963,10 +1004,22 @@ class ChatOrchestrator:
                     max_context_chars=int(self.guard_rules.get("tool_context", {}).get("max_chars", 4000)),
                 )
                 if tool_context.strip():
-                    context_blocks.append(f"[Tool: {tool_name}]\nResult: {tool_context}")
+                    context_items.append(
+                        build_context_item(
+                            source="tools",
+                            content=f"[Tool: {tool_name}]\nResult: {tool_context}",
+                            title=tool_name,
+                            metadata={"success": True},
+                        )
+                    )
             elif isinstance(tools_mode, list):
-                context_blocks.append(
-                    f"[Tool: {tool_name}]\nStatus: failed\nError: {result.error or 'tool_execution_failed'}"
+                context_items.append(
+                    build_context_item(
+                        source="tools",
+                        content=f"[Tool: {tool_name}]\nStatus: failed\nError: {result.error or 'tool_execution_failed'}",
+                        title=tool_name,
+                        metadata={"success": False},
+                    )
                 )
 
             log_safe(
@@ -978,7 +1031,7 @@ class ChatOrchestrator:
                 error_code="" if result.success else (result.error or "tool_execution_failed"),
             )
 
-        return "\n\n".join(context_blocks).strip(), self._dedupe_sources(sources), used, executions
+        return self._dedupe_sources(sources), used, executions, context_items
 
     async def _run_web_search(self, query: str, max_results: int) -> tuple[list[SearchResult], bool]:
         tool = self.tool_registry.get_helper("web.search")
@@ -1011,6 +1064,157 @@ class ChatOrchestrator:
         if not iso_value:
             return ""
         return f"[Current Datetime]\nISO: {iso_value}\nTimezone: {tz_value}"
+
+    @staticmethod
+    def _build_semantic_recall_items(matches: list[dict[str, Any]]) -> list[ContextItem]:
+        items: list[ContextItem] = []
+        for index, item in enumerate(matches, start=1):
+            content = str(item.get("content") or "").strip()
+            if not content:
+                continue
+            items.append(
+                build_context_item(
+                    source="semantic_recall",
+                    content=content,
+                    title=f"Memory {index}",
+                    score=float(item.get("score") or 0.0),
+                    pinned=bool(item.get("pinned")),
+                    created_at=str(item.get("created_at") or ""),
+                    metadata={
+                        "message_id": str(item.get("message_id") or ""),
+                        "conversation_id": str(item.get("conversation_id") or ""),
+                    },
+                )
+            )
+        return items
+
+    @staticmethod
+    def _build_memory_search_items(rows: list[dict[str, Any]]) -> list[ContextItem]:
+        items: list[ContextItem] = []
+        for index, row in enumerate(rows, start=1):
+            content = str(row.get("snippet") or row.get("content") or "").strip()
+            if not content:
+                continue
+            title = str(row.get("conversation_title") or f"Memory search {index}")
+            rank_value = row.get("rank")
+            items.append(
+                build_context_item(
+                    source="fts",
+                    content=content,
+                    title=title,
+                    score=float(rank_value) if rank_value is not None else None,
+                    pinned=bool(row.get("memory_pinned")),
+                    created_at=str(row.get("created_at") or ""),
+                    metadata={
+                        "message_id": str(row.get("id") or ""),
+                        "conversation_id": str(row.get("conversation_id") or ""),
+                        "search_backend": str(row.get("search_backend") or ""),
+                    },
+                )
+            )
+        return items
+
+    @staticmethod
+    def _should_use_memory_fts(request: ChatCompletionRequest, latest_user_message: str) -> bool:
+        if not str(request.conversation_id or "").strip():
+            return False
+        requested = str(request.semantic_recall or "auto").strip().lower()
+        if requested == "on":
+            return True
+        normalized = " ".join(str(latest_user_message or "").lower().split())
+        followup_markers = (
+            "trước đó",
+            "hồi nãy",
+            "vừa rồi",
+            "phần đó",
+            "cái đó",
+            "như đã nói",
+        )
+        return any(marker in normalized for marker in followup_markers)
+
+    def _build_retrieval_info(
+        self,
+        *,
+        request: ChatCompletionRequest,
+        assembly: ContextAssemblyResult,
+        semantic_recall_info: SemanticRecallInfo,
+        summary_text: str,
+        search_used: bool,
+        fts_used: bool,
+        tool_context_used: bool,
+        tools_meta: ToolMetadata,
+    ) -> RetrievalInfo:
+        context_sources: list[str] = []
+
+        def add_source(source_name: str) -> None:
+            source = str(source_name or "").strip().lower()
+            if not source or source in context_sources:
+                return
+            context_sources.append(source)
+
+        if bool(request.conversation_history_used):
+            add_source("recent")
+        if bool(request.conversation_summary_used) or bool(summary_text.strip()):
+            add_source("summary")
+        if any(item.pinned for item in assembly.items) or semantic_recall_info.pinned_matches_count > 0:
+            add_source("pinned_memory")
+        if semantic_recall_info.used:
+            add_source("semantic_recall")
+        if fts_used:
+            add_source("fts")
+        if search_used:
+            add_source("search")
+        if tool_context_used or bool(tools_meta.used):
+            add_source("tools")
+
+        supplemental_sources = [source for source in context_sources if source not in {"recent", "summary"}]
+        if not context_sources:
+            retrieval_decision = "none"
+        elif len(context_sources) == 1:
+            retrieval_decision = context_sources[0]
+        elif supplemental_sources:
+            retrieval_decision = "hybrid"
+        else:
+            retrieval_decision = "conversation"
+
+        retrieval_reason = None
+        if semantic_recall_info.used:
+            retrieval_reason = semantic_recall_info.reason or "semantic_recall_enabled"
+        elif fts_used:
+            retrieval_reason = "followup_reference"
+        elif search_used:
+            retrieval_reason = "search_enabled"
+        elif tool_context_used:
+            retrieval_reason = "tool_context_available"
+        elif context_sources:
+            retrieval_reason = "conversation_context"
+
+        used_chars = assembly.context_used_chars
+        if bool(request.conversation_summary_used):
+            used_chars += len(summary_text)
+
+        context_items_count = assembly.context_items_count
+        if bool(request.conversation_history_used):
+            context_items_count += 1
+        if bool(request.conversation_summary_used):
+            context_items_count += 1
+
+        return RetrievalInfo(
+            context_used=bool(context_sources),
+            context_sources=context_sources,
+            context_items_count=context_items_count,
+            context_truncated=assembly.context_truncated,
+            context_budget_chars=assembly.context_budget_chars,
+            context_used_chars=used_chars,
+            summary_used=bool(request.conversation_summary_used),
+            pinned_memory_used=any(item.pinned for item in assembly.items) or semantic_recall_info.pinned_matches_count > 0,
+            fts_used=fts_used,
+            semantic_recall_used=semantic_recall_info.used,
+            search_used=search_used,
+            tools_used=list(tools_meta.used),
+            retrieval_decision=retrieval_decision,
+            retrieval_reason=retrieval_reason,
+        )
 
     @staticmethod
     def _latest_user_message(messages: list[ChatMessage]) -> str:
