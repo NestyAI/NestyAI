@@ -27,7 +27,6 @@ def extract_weather_location(message: str, default_location: str | None = None) 
         matched = pattern.search(cleaned)
         if matched:
             location = matched.group(1).strip(" .?!,")
-            # remove trailing generic words
             location = re.sub(
                 r"\b(hôm nay|ngày mai|now|today|tomorrow|forecast|dự báo)\b.*$",
                 "",
@@ -66,8 +65,8 @@ async def execute_weather_lookup(message: str, context: dict[str, Any] | None = 
     started = time.perf_counter()
     ctx = context or {}
     timeout_seconds = float(ctx.get("timeout_seconds", 6))
-    allow_default = bool(ctx.get("allow_default_weather_location", True))
-    default_location = str(ctx.get("default_weather_location", "Ho Chi Minh City")).strip()
+    allow_default = bool(ctx.get("allow_default_weather_location", False))
+    default_location = str(ctx.get("default_weather_location", "")).strip() or None
     location = extract_weather_location(message, default_location if allow_default else None)
     if not location:
         return ToolResult(
@@ -177,4 +176,3 @@ async def execute_weather_lookup(message: str, context: dict[str, Any] | None = 
         confidence="medium",
         latency_ms=int((time.perf_counter() - started) * 1000),
     )
-

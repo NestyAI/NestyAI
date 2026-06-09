@@ -151,7 +151,8 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
           "enabled": false,
           "query": null,
           "failed": false,
-          "results_count": 0
+          "results_count": 0,
+          "used": false
         },
         "used": [],
         "executions": []
@@ -191,6 +192,15 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
         "flags": [],
         "action": "none"
       },
+      "planner": {
+        "search_decision": "no_search_needed",
+        "search_planned": false,
+        "search_used": false,
+        "tool_decision": "no_tool_needed",
+        "tools_planned": [],
+        "tools_used": [],
+        "clarification_needed": false
+      },
       "auth": null,
       "conversation": {
         "id": "conv_123",
@@ -209,7 +219,7 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
         *   **Chunk Event**:
             `data: {"id": "...", "object": "chat.completion.chunk", "created": 1234, "model": "...", "provider": "...", "choices": [{"index": 0, "delta": {"content": "part"}, "finish_reason": null}]}`
         *   **Metadata Event**:
-            `data: {"id": "...", "object": "chat.completion.metadata", "created": 1234, "model": "...", "provider": "...", "guard": {...}, "tools": {...}, "sources": [...], "usage": {...}, "orchestration": {...}, "semantic_recall": {...}, "provider_health": {...}, "output_safety": {...}, "answer_quality": {...}, "conversation": {...}, "model_alias": "..."}`
+            `data: {"id": "...", "object": "chat.completion.metadata", "created": 1234, "model": "...", "provider": "...", "guard": {...}, "tools": {...}, "sources": [...], "usage": {...}, "orchestration": {...}, "semantic_recall": {...}, "provider_health": {...}, "output_safety": {...}, "answer_quality": {...}, "planner": {...}, "retrieval": {...}, "conversation": {...}, "model_alias": "..."}`
         *   **Termination Event**:
             `data: [DONE]`
         *   **Interrupted Stream Error (if interrupted)**:

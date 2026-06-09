@@ -24,10 +24,10 @@ _STOPWORDS = {
     "is",
     "the",
     "of",
-    "bản",
-    "mới",
-    "nhất",
-    "phiên",
+    "ban",
+    "moi",
+    "nhat",
+    "phien",
 }
 
 
@@ -57,6 +57,10 @@ def _extract_package_name(message: str) -> str | None:
             continue
         return candidate
     return None
+
+
+def extract_package_name(message: str) -> str | None:
+    return _extract_package_name(message)
 
 
 async def _lookup_pypi(client: httpx.AsyncClient, package_name: str) -> ToolResult | None:
@@ -138,7 +142,7 @@ async def _lookup_npm(client: httpx.AsyncClient, package_name: str) -> ToolResul
 async def execute_package_version_lookup(message: str, context: dict[str, Any] | None = None) -> ToolResult:
     started = time.perf_counter()
     timeout_seconds = float((context or {}).get("timeout_seconds", 6))
-    package_name = _extract_package_name(message)
+    package_name = extract_package_name(message)
     if not package_name:
         return ToolResult(
             name="package_version_lookup",
@@ -183,3 +187,4 @@ async def execute_package_version_lookup(message: str, context: dict[str, Any] |
 
     result.latency_ms = int((time.perf_counter() - started) * 1000)
     return result
+

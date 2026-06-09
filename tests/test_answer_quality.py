@@ -167,6 +167,20 @@ def test_evaluate_answer_quality_reuses_output_safety_markup_flag() -> None:
     assert info.action == "cleaned_internal_markup"
 
 
+def test_evaluate_answer_quality_uses_planner_search_evidence() -> None:
+    final_text, info = evaluate_answer_quality(
+        "I searched the web and found it online.",
+        retrieval={"search_used": False},
+        tools={"search": {"used": False, "enabled": False}, "used": []},
+        sources=[],
+        planner={"search_used": True},
+    )
+    assert final_text == "I searched the web and found it online."
+    assert info.checked is True
+    assert info.flags == []
+    assert info.action == "none"
+
+
 @pytest.mark.asyncio
 async def test_non_stream_empty_answer_uses_fallback_and_metadata(tmp_path) -> None:
     db_path = str(tmp_path / "answer_quality_empty.db")

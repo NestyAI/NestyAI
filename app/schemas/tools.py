@@ -23,6 +23,7 @@ class SearchToolMetadata(BaseModel):
     query: str | None = None
     results_count: int = 0
     failed: bool = False
+    used: bool = False
 
 
 class ToolMetadata(BaseModel):

@@ -136,7 +136,7 @@ async def chat_completions(request: ChatCompletionRequest, raw_request: Request)
                     completion_tokens=stream_handle.outcome.usage.completion_tokens,
                     total_tokens=stream_handle.outcome.usage.total_tokens,
                     tools_used=stream_handle.outcome.tools.used,
-                    search_used=stream_handle.outcome.tools.search.enabled,
+                    search_used=bool(getattr(stream_handle.outcome.tools.search, "used", stream_handle.outcome.tools.search.enabled)),
                     latency_ms=latency_ms,
                     status=stream_handle.outcome.status,
                     error_code=stream_handle.outcome.error_code or None,
@@ -194,7 +194,7 @@ async def chat_completions(request: ChatCompletionRequest, raw_request: Request)
         completion_tokens = response.usage.completion_tokens
         total_tokens = response.usage.total_tokens
         tools_used = response.tools.used
-        search_used = response.tools.search.enabled
+        search_used = bool(getattr(response.tools.search, "used", response.tools.search.enabled))
         status = "success"
 
         if request.store and conversation_id:

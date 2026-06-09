@@ -128,6 +128,19 @@ class AnswerQualityInfo(BaseModel):
     action: str = "none"
 
 
+class PlannerInfo(BaseModel):
+    search_decision: str = "unknown"
+    search_planned: bool = False
+    search_used: bool = False
+    search_reason: str | None = None
+    tool_decision: str = "unknown"
+    tools_planned: list[str] = Field(default_factory=list)
+    tools_used: list[str] = Field(default_factory=list)
+    tool_reason: str | None = None
+    clarification_needed: bool = False
+    clarification_reason: str | None = None
+
+
 class RetrievalInfo(BaseModel):
     context_used: bool = False
     context_sources: list[str] = Field(default_factory=list)
@@ -161,6 +174,7 @@ class ChatCompletionResponse(BaseModel):
     provider_health: ProviderHealthInfo | None = None
     output_safety: OutputSafetyInfo | None = None
     answer_quality: AnswerQualityInfo = Field(default_factory=AnswerQualityInfo)
+    planner: PlannerInfo = Field(default_factory=PlannerInfo)
     retrieval: RetrievalInfo = Field(default_factory=RetrievalInfo)
     auth: AuthDebugInfo | None = None
     conversation: ConversationInfo | None = None

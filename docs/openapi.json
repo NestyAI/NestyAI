@@ -2278,6 +2278,9 @@
           "answer_quality": {
             "$ref": "#/components/schemas/AnswerQualityInfo"
           },
+          "planner": {
+            "$ref": "#/components/schemas/PlannerInfo"
+          },
           "retrieval": {
             "$ref": "#/components/schemas/RetrievalInfo"
           },
@@ -3165,6 +3168,84 @@
         "type": "object",
         "title": "OutputSafetyInfo"
       },
+      "PlannerInfo": {
+        "properties": {
+          "search_decision": {
+            "type": "string",
+            "title": "Search Decision",
+            "default": "unknown"
+          },
+          "search_planned": {
+            "type": "boolean",
+            "title": "Search Planned",
+            "default": false
+          },
+          "search_used": {
+            "type": "boolean",
+            "title": "Search Used",
+            "default": false
+          },
+          "search_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Reason"
+          },
+          "tool_decision": {
+            "type": "string",
+            "title": "Tool Decision",
+            "default": "unknown"
+          },
+          "tools_planned": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tools Planned"
+          },
+          "tools_used": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tools Used"
+          },
+          "tool_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Reason"
+          },
+          "clarification_needed": {
+            "type": "boolean",
+            "title": "Clarification Needed",
+            "default": false
+          },
+          "clarification_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Reason"
+          }
+        },
+        "type": "object",
+        "title": "PlannerInfo"
+      },
       "ProviderHealthCheckRequest": {
         "properties": {
           "model_alias": {
@@ -3419,6 +3500,11 @@
           "failed": {
             "type": "boolean",
             "title": "Failed",
+            "default": false
+          },
+          "used": {
+            "type": "boolean",
+            "title": "Used",
             "default": false
           }
         },

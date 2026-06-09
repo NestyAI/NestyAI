@@ -24,9 +24,9 @@ _ALLOWED_UNARYOPS: dict[type[ast.unaryop], Any] = {
 
 
 def _extract_expression(message: str) -> str | None:
-    normalized = message.strip().replace("×", "*").replace("x", "*")
+    normalized = message.strip().replace("Ã—", "*").replace("x", "*")
     percent_match = re.search(
-        r"(\d+(?:\.\d+)?)\s*%\s*(?:of|của)\s*(\d+(?:\.\d+)?)",
+        r"(\d+(?:\.\d+)?)\s*%\s*(?:of|cua)\s*(\d+(?:\.\d+)?)",
         normalized,
         flags=re.IGNORECASE,
     )
@@ -41,6 +41,10 @@ def _extract_expression(message: str) -> str | None:
     if not re.search(r"[+\-*/%()]", candidate):
         return None
     return candidate
+
+
+def extract_calculator_expression(message: str) -> str | None:
+    return _extract_expression(message)
 
 
 def _eval_ast(node: ast.AST) -> float:
@@ -61,7 +65,7 @@ def _eval_ast(node: ast.AST) -> float:
 
 async def execute_calculator(message: str, context: dict[str, Any] | None = None) -> ToolResult:
     started = time.perf_counter()
-    expression = _extract_expression(message)
+    expression = extract_calculator_expression(message)
     if not expression:
         return ToolResult(
             name="calculator",
@@ -94,3 +98,4 @@ async def execute_calculator(message: str, context: dict[str, Any] | None = None
         confidence="high",
         latency_ms=int((time.perf_counter() - started) * 1000),
     )
+

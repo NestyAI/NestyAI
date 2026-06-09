@@ -7,6 +7,18 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.2.3] - Unreleased
+
+### Added
+- Added safe planner metadata for search and tool decisions, including additive clarification signals.
+
+### Changed
+- Improved conservative search and tool planning for current-information requests, memory-like follow-ups, and deterministic tools.
+- Added explicit distinction between planned search and search that was actually used in response metadata.
+
+### Security
+- Planner metadata remains sanitized and does not expose hidden prompts, chain-of-thought, raw tool payloads, provider secrets, or internal exceptions.
+
 ## [1.2.2] - Unreleased
 
 ### Added

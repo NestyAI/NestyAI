@@ -14,6 +14,7 @@ from app.core.model_behavior import apply_behavior_defaults, build_behavior_syst
 from app.core.context_assembler import ContextItem, ContextAssemblyResult, assemble_hybrid_context, build_context_item
 from app.core.multi_model_orchestrator import NestyProMultiModelOrchestrator, should_use_orchestration, MultiModelOrchestrationError
 from app.core.prompt_builder import (
+    append_clarification_instruction,
     append_behavior_instruction,
     append_retrieval_context,
     ensure_system_message,
@@ -33,6 +34,7 @@ from app.schemas.chat import (
     OrchestrationInfo,
     AnswerQualityInfo,
     OutputSafetyInfo,
+    PlannerInfo,
     ProviderHealthInfo,
     RetrievalInfo,
     SemanticRecallInfo,
@@ -40,9 +42,9 @@ from app.schemas.chat import (
 )
 from app.schemas.tools import SearchResult, SourceItem, ToolExecutionMetadata, ToolMetadata
 from app.storage.db import get_connection
-from app.tools.planner import plan_tools
+from app.tools.planner import ToolPlanDecision, plan_tools, plan_tools_decision
 from app.tools.registry import ToolRegistry
-from app.tools.search_intent import should_use_search
+from app.tools.search_intent import SearchPlanDecision, plan_search_intent
 from app.utils.ids import generate_chat_completion_id
 from app.utils.logging import log_safe
 from app.utils.sse import format_sse_data
@@ -68,6 +70,7 @@ class StreamOutcome:
     provider_health: ProviderHealthInfo | None = None
     output_safety: OutputSafetyInfo = field(default_factory=OutputSafetyInfo)
     answer_quality: AnswerQualityInfo = field(default_factory=AnswerQualityInfo)
+    planner: PlannerInfo = field(default_factory=PlannerInfo)
     retrieval: RetrievalInfo = field(default_factory=RetrievalInfo)
 
 
@@ -130,7 +133,7 @@ class ChatOrchestrator:
 
         started_at = time.perf_counter()
         tools_mode = self._normalize_and_validate_request(request)
-        messages, input_guard_info, tools_meta, sources, semantic_recall, retrieval = await self._prepare_chat_context(
+        messages, input_guard_info, tools_meta, sources, semantic_recall, retrieval, planner = await self._prepare_chat_context(
             request_id=request_id,
             request=request,
             tools_mode=tools_mode,
@@ -290,6 +293,7 @@ class ChatOrchestrator:
                 retrieval=retrieval,
                 tools=tools_meta,
                 sources=sources,
+                planner=planner,
                 output_safety=output_safety,
                 streaming=False,
             )
@@ -328,6 +332,7 @@ class ChatOrchestrator:
                 provider_health=provider_health_info,
                 output_safety=output_safety,
                 answer_quality=answer_quality,
+                planner=planner,
                 retrieval=retrieval,
                 model_alias=request.model,
             )
@@ -356,7 +361,7 @@ class ChatOrchestrator:
             )
         request = request.model_copy(update=apply_behavior_defaults(request, model_profile_obj.model_dump()))
         tools_mode = self._normalize_and_validate_request(request)
-        messages, input_guard_info, tools_meta, sources, semantic_recall, retrieval = await self._prepare_chat_context(
+        messages, input_guard_info, tools_meta, sources, semantic_recall, retrieval, planner = await self._prepare_chat_context(
             request_id=request_id,
             request=request,
             tools_mode=tools_mode,
@@ -396,6 +401,7 @@ class ChatOrchestrator:
             conversation_summary_updated=request.conversation_summary_updated if request.store else False,
             orchestration=self._orchestration_info_from_decision(decision),
             semantic_recall=semantic_recall,
+            planner=planner,
             retrieval=retrieval,
             provider_health=(
                 ProviderHealthInfo.model_validate(getattr(stream_result, "provider_health"))
@@ -503,6 +509,7 @@ class ChatOrchestrator:
                 retrieval=outcome.retrieval,
                 tools=outcome.tools,
                 sources=outcome.sources,
+                planner=outcome.planner,
                 output_safety=outcome.output_safety,
                 streaming=True,
             )
@@ -540,10 +547,11 @@ class ChatOrchestrator:
                     "usage": outcome.usage.model_dump(),
                     "orchestration": outcome.orchestration.model_dump(),
                     "semantic_recall": outcome.semantic_recall.model_dump(),
-                    "retrieval": outcome.retrieval.model_dump(),
                     "provider_health": outcome.provider_health.model_dump() if outcome.provider_health else None,
                     "output_safety": outcome.output_safety.model_dump(),
                     "answer_quality": outcome.answer_quality.model_dump(),
+                    "planner": outcome.planner.model_dump(),
+                    "retrieval": outcome.retrieval.model_dump(),
                     "conversation": (
                         ConversationInfo(
                             id=outcome.conversation_id,
@@ -607,7 +615,7 @@ class ChatOrchestrator:
         request_id: str,
         request: ChatCompletionRequest,
         tools_mode: str | list[str],
-    ) -> tuple[list[ChatMessage], GuardInfo, ToolMetadata, list[SourceItem], SemanticRecallInfo, RetrievalInfo]:
+    ) -> tuple[list[ChatMessage], GuardInfo, ToolMetadata, list[SourceItem], SemanticRecallInfo, RetrievalInfo, PlannerInfo]:
         model_profile = self._resolve_model_profile(request.model)
         if not model_profile:
             raise APIError(
@@ -799,23 +807,53 @@ class ChatOrchestrator:
                 fts_context_items = []
                 fts_used = False
 
-        search_sources, search_used_tools, search_context_items = await self._maybe_apply_search_context(
+        memory_context_available = bool(
+            summary_text.strip()
+            or bool(request.conversation_history_used)
+            or semantic_recall_info.used
+            or fts_used
+        )
+        search_plan = plan_search_intent(
+            latest_user_message,
+            model_profile_dict,
+            explicit_search_mode=request.search,
+            memory_context_available=memory_context_available,
+        )
+        tool_plan = self._plan_tools_decision(
+            message=latest_user_message,
+            model_profile=model_profile_dict,
+            tools_mode=tools_mode,
+        )
+        planner_info = PlannerInfo(
+            search_decision=search_plan.decision,
+            search_planned=bool(search_plan.search_planned),
+            search_used=False,
+            search_reason=search_plan.reason,
+            tool_decision=tool_plan.decision,
+            tools_planned=list(tool_plan.tools_planned),
+            tools_used=[],
+            tool_reason=tool_plan.reason,
+            clarification_needed=bool(tool_plan.clarification_needed),
+            clarification_reason=tool_plan.clarification_reason,
+        )
+
+        search_sources, search_used_tools, search_context_items, search_used = await self._maybe_apply_search_context(
             request=request,
             latest_user_message=latest_user_message,
             model_profile=model_profile_dict,
             tools_meta=tools_meta,
             request_id=request_id,
+            search_plan=search_plan,
         )
         sources.extend(search_sources)
         tools_meta.used.extend(search_used_tools)
         retrieval_items.extend(search_context_items)
         retrieval_items.extend(fts_context_items)
 
-        planned_tools = self._plan_tools(
-            message=latest_user_message,
-            model_profile=model_profile_dict,
-            tools_mode=tools_mode,
-        )
+        if tool_plan.clarification_needed and tool_plan.clarification_reason:
+            messages = append_clarification_instruction(messages, tool_plan.clarification_reason)
+
+        planned_tools = list(tool_plan.tools_planned)
         tool_sources, tool_used, executions, tool_context_items = await self._execute_planned_tools(
             message=latest_user_message,
             planned_tools=planned_tools,
@@ -827,6 +865,9 @@ class ChatOrchestrator:
         tools_meta.executions = executions
         sources.extend(tool_sources)
         retrieval_items.extend(tool_context_items)
+        tools_meta.search.used = bool(search_used)
+        planner_info.search_used = bool(search_used)
+        planner_info.tools_used = list(tool_used)
 
         assembly = assemble_hybrid_context(
             retrieval_items,
@@ -841,13 +882,13 @@ class ChatOrchestrator:
             assembly=assembly,
             semantic_recall_info=semantic_recall_info,
             summary_text=summary_text,
-            search_used=bool(search_context_items),
+            search_used=bool(search_used),
             fts_used=fts_used,
             tool_context_used=bool(tool_context_items),
             tools_meta=tools_meta,
         )
 
-        return messages, input_guard_info, tools_meta, sources, semantic_recall_info, retrieval_info
+        return messages, input_guard_info, tools_meta, sources, semantic_recall_info, retrieval_info, planner_info
 
     def _normalize_tools_mode(self, tools_field: str | list[str]) -> str | list[str]:
         if isinstance(tools_field, str):
@@ -882,20 +923,20 @@ class ChatOrchestrator:
         model_profile: dict[str, Any],
         tools_meta: ToolMetadata,
         request_id: str,
-    ) -> tuple[list[SourceItem], list[str], list[ContextItem]]:
-        use_search = should_use_search(
-            latest_user_message,
-            model_profile,
-            explicit_search_mode=request.search,
-        )
-        if not use_search:
-            return [], [], []
+        search_plan: SearchPlanDecision,
+    ) -> tuple[list[SourceItem], list[str], list[ContextItem], bool]:
+        if not search_plan.should_use:
+            tools_meta.search.enabled = bool(search_plan.search_planned)
+            tools_meta.search.used = False
+            tools_meta.search.query = None
+            return [], [], [], False
 
         search_sources: list[SourceItem] = []
         used_tools: list[str] = ["current_datetime", "web_search"]
         context_items: list[ContextItem] = []
         tools_meta.search.enabled = True
         tools_meta.search.query = latest_user_message
+        tools_meta.search.used = False
         datetime_context = self._get_current_datetime_context()
         search_results, search_failed = await self._run_web_search(
             query=latest_user_message,
@@ -903,6 +944,7 @@ class ChatOrchestrator:
         )
         tools_meta.search.failed = search_failed
         tools_meta.search.results_count = len(search_results)
+        actual_search_used = False
 
         if search_failed and request.search == "on":
             raise APIError(
@@ -930,6 +972,7 @@ class ChatOrchestrator:
                         metadata={"result_count": len(search_results)},
                     )
                 )
+                actual_search_used = True
             log_safe(
                 self.logger,
                 "context_sanitized",
@@ -953,7 +996,8 @@ class ChatOrchestrator:
                 )
             )
 
-        return search_sources, used_tools, context_items
+        tools_meta.search.used = actual_search_used
+        return search_sources, used_tools, context_items, actual_search_used
 
     def _plan_tools(
         self,
@@ -962,6 +1006,18 @@ class ChatOrchestrator:
         tools_mode: str | list[str],
     ) -> list[str]:
         return plan_tools(
+            message=message,
+            model_config=model_profile,
+            explicit_tools=tools_mode,
+        )
+
+    def _plan_tools_decision(
+        self,
+        message: str,
+        model_profile: dict[str, Any],
+        tools_mode: str | list[str],
+    ) -> ToolPlanDecision:
+        return plan_tools_decision(
             message=message,
             model_config=model_profile,
             explicit_tools=tools_mode,

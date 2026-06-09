@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.schemas.chat import AnswerQualityInfo, OutputSafetyInfo, RetrievalInfo
+from app.schemas.chat import AnswerQualityInfo, OutputSafetyInfo, PlannerInfo, RetrievalInfo
 from app.schemas.tools import SourceItem, ToolMetadata
 
 
@@ -47,6 +47,7 @@ def _search_evidence_present(
     retrieval: RetrievalInfo | dict[str, Any] | None,
     tools: ToolMetadata | dict[str, Any] | None,
     sources: list[SourceItem] | list[dict[str, Any]] | None,
+    planner: PlannerInfo | dict[str, Any] | None = None,
 ) -> bool:
     if isinstance(retrieval, dict):
         if bool(retrieval.get("search_used")):
@@ -54,11 +55,15 @@ def _search_evidence_present(
     elif retrieval is not None and bool(getattr(retrieval, "search_used", False)):
         return True
 
+    if isinstance(planner, dict):
+        if bool(planner.get("search_used")):
+            return True
+    elif planner is not None and bool(getattr(planner, "search_used", False)):
+        return True
+
     search_meta = _tool_meta_value(tools, "search", None)
     if search_meta is not None:
-        if bool(_tool_meta_value(search_meta, "query", None)) or int(_tool_meta_value(search_meta, "results_count", 0) or 0) > 0:
-            return True
-        if bool(_tool_meta_value(search_meta, "failed", False)) and bool(_tool_meta_value(search_meta, "enabled", False)):
+        if bool(_tool_meta_value(search_meta, "used", False)):
             return True
 
     used_tools = _tool_meta_value(tools, "used", []) or []
@@ -76,8 +81,9 @@ def _claimed_search_without_search(
     retrieval: RetrievalInfo | dict[str, Any] | None,
     tools: ToolMetadata | dict[str, Any] | None,
     sources: list[SourceItem] | list[dict[str, Any]] | None,
+    planner: PlannerInfo | dict[str, Any] | None = None,
 ) -> bool:
-    if _search_evidence_present(retrieval=retrieval, tools=tools, sources=sources):
+    if _search_evidence_present(retrieval=retrieval, tools=tools, sources=sources, planner=planner):
         return False
     normalized = _normalized_text(answer_text)
     return any(pattern in normalized for pattern in _SEARCH_CLAIM_PATTERNS)
@@ -89,6 +95,7 @@ def evaluate_answer_quality(
     retrieval: RetrievalInfo | dict[str, Any] | None = None,
     tools: ToolMetadata | dict[str, Any] | None = None,
     sources: list[SourceItem] | list[dict[str, Any]] | None = None,
+    planner: PlannerInfo | dict[str, Any] | None = None,
     output_safety: OutputSafetyInfo | dict[str, Any] | None = None,
     streaming: bool = False,
 ) -> tuple[str, AnswerQualityInfo]:
@@ -108,7 +115,7 @@ def evaluate_answer_quality(
     flags: list[str] = []
     if detected_markup:
         flags.append("internal_markup_detected")
-    if _claimed_search_without_search(raw_text, retrieval=retrieval, tools=tools, sources=sources):
+    if _claimed_search_without_search(raw_text, retrieval=retrieval, tools=tools, sources=sources, planner=planner):
         flags.append("claimed_search_without_search")
 
     if not streaming and not normalized_text:
