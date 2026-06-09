@@ -35,7 +35,7 @@ def test_provider_health_record_list_latest_summarize(monkeypatch, tmp_path) -> 
         latency_ms=120,
         output_chars=2,
         tokens_per_second=8.0,
-        metadata={"output_preview": "OK"},
+        metadata={"output_preview": "OK", "config_source": "override", "config_revision": "abc123"},
     )
     _ = record_provider_health_check(
         provider="openrouter",
@@ -62,6 +62,8 @@ def test_provider_health_record_list_latest_summarize(monkeypatch, tmp_path) -> 
 
     recent = list_provider_health_checks(limit=10)
     assert len(recent) == 3
+    override_row = next(item for item in recent if item.get("metadata", {}).get("config_revision") == "abc123")
+    assert override_row["config_source"] == "override"
 
     filtered = list_provider_health_checks(provider="openrouter", status="failed", limit=10)
     assert len(filtered) == 1
@@ -70,6 +72,7 @@ def test_provider_health_record_list_latest_summarize(monkeypatch, tmp_path) -> 
     latest = get_latest_provider_health()
     assert latest
     assert any(item["provider"] == "openrouter" for item in latest)
+    assert any(item.get("config_source") == "override" for item in recent)
 
     summary = summarize_provider_health()
     assert summary["total_checks"] == 3

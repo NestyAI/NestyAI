@@ -5,8 +5,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
+import app.deps as deps
 from app.core.errors import APIError
-from app.deps import get_settings
 from app.security.api_key import generate_api_key
 from app.security.internal_auth import require_internal_admin
 from app.storage.api_keys import (
@@ -32,6 +32,10 @@ router = APIRouter(
     tags=["internal-api-keys"],
     dependencies=[Depends(require_internal_admin)],
 )
+
+
+def get_settings():
+    return deps.get_settings()
 
 
 def map_db_record_to_public_info(record: dict[str, Any], settings: Any) -> dict[str, Any]:

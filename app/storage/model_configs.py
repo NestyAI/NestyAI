@@ -37,6 +37,17 @@ def _parse_json(raw: str | None) -> dict[str, Any] | None:
     return parsed
 
 
+def _clear_runtime_model_config_caches() -> None:
+    try:
+        from app.deps import clear_runtime_model_config_caches
+    except Exception:
+        return
+    try:
+        clear_runtime_model_config_caches()
+    except Exception:
+        return
+
+
 def get_model_override(model_id: str, db_path: str | None = None) -> dict[str, Any] | None:
     with get_connection(_effective_db_path(db_path)) as conn:
         row = conn.execute(
@@ -187,6 +198,7 @@ def upsert_model_override(
         changed_by_label=changed_by_label,
         db_path=db_path,
     )
+    _clear_runtime_model_config_caches()
     created = get_model_override(model_id=model_id, db_path=db_path)
     if created is None:
         return {
@@ -233,6 +245,7 @@ def reset_model_override(
         changed_by_label=changed_by_label,
         db_path=db_path,
     )
+    _clear_runtime_model_config_caches()
     return True
 
 

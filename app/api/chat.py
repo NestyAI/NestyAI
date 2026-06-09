@@ -5,10 +5,10 @@ import time
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
+import app.deps as deps
 from app.core.conversation_summarizer import summarize_conversation
 from app.core.embedding_service import maybe_embed_conversation_message
 from app.core.errors import APIError
-from app.deps import get_guard_rules, get_orchestrator, get_settings
 from app.guards.input_guard import InputGuard
 from app.schemas.chat import AuthDebugInfo, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ConversationInfo
 from app.security.auth import AuthContext, optional_api_key, require_api_key
@@ -26,6 +26,18 @@ from app.utils.ids import generate_request_id
 
 
 router = APIRouter(prefix="/v1", tags=["chat"])
+
+
+def get_settings():
+    return deps.get_settings()
+
+
+def get_guard_rules():
+    return deps.get_guard_rules()
+
+
+def get_orchestrator():
+    return deps.get_orchestrator()
 
 
 @router.post("/chat/completions", response_model=ChatCompletionResponse, response_model_exclude_none=True)

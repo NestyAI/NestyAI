@@ -18,9 +18,22 @@ from app.tools.registry import tool_registry
 from app.utils.logging import get_logger
 
 
+_RUNTIME_SETTINGS_OVERRIDE: Settings | None = None
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    if _RUNTIME_SETTINGS_OVERRIDE is not None:
+        return _RUNTIME_SETTINGS_OVERRIDE
     return Settings.from_env()
+
+
+def set_runtime_settings(settings: Settings | None) -> None:
+    global _RUNTIME_SETTINGS_OVERRIDE
+    _RUNTIME_SETTINGS_OVERRIDE = settings
+    cache_clear = getattr(get_settings, "cache_clear", None)
+    if callable(cache_clear):
+        cache_clear()
 
 
 def get_models_config() -> ModelsConfig:
@@ -88,3 +101,15 @@ def get_orchestrator() -> ChatOrchestrator:
         enable_output_guard=settings.enable_output_guard,
         logger=logger,
     )
+
+
+def clear_runtime_model_config_caches() -> None:
+    """Drop cached dependency objects that embed resolved model configs.
+
+    Model config overrides are read from SQLite at runtime. When an override is
+    patched or reset, any cached router/orchestrator objects must be rebuilt so
+    diagnostics and health checks observe the fresh effective config immediately.
+    """
+
+    get_provider_router.cache_clear()
+    get_orchestrator.cache_clear()

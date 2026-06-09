@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
+import app.deps as deps
 from app.core.model_config_loader import list_effective_model_configs
 from app.deps import get_models_config
-from app.deps import get_settings
 from app.security.auth import require_api_key
 from app.schemas.models import ModelCard, ModelListResponse
 
 
 router = APIRouter(prefix="/v1", tags=["models"])
+
+
+def get_settings():
+    return deps.get_settings()
 
 
 @router.get("/models", response_model=ModelListResponse)

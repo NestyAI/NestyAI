@@ -3,10 +3,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+import app.deps as deps
 from app.core.embedding_service import generate_embedding
 from app.core.errors import APIError
 from app.core.semantic_recall import retrieve_semantic_memories
-from app.deps import get_settings
 from app.security.internal_auth import require_internal_admin
 
 
@@ -15,6 +15,10 @@ router = APIRouter(
     tags=["internal-embeddings"],
     dependencies=[Depends(require_internal_admin)],
 )
+
+
+def get_settings():
+    return deps.get_settings()
 
 
 class InternalEmbeddingTestRequest(BaseModel):

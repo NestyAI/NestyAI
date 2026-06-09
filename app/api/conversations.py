@@ -3,9 +3,9 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
+import app.deps as deps
 from app.core.conversation_summarizer import summarize_conversation
 from app.core.errors import APIError
-from app.deps import get_orchestrator, get_settings
 from app.security.auth import AuthContext, optional_api_key, require_api_key
 from app.storage.conversations import (
     archive_conversation,
@@ -27,6 +27,14 @@ from app.storage.conversations import (
 
 
 router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
+
+
+def get_settings():
+    return deps.get_settings()
+
+
+def get_orchestrator():
+    return deps.get_orchestrator()
 
 
 class UpdateConversationTitleRequest(BaseModel):

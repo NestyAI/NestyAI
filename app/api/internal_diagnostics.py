@@ -3,9 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+import app.deps as deps
 from app.core.errors import APIError
 from app.core.provider_diagnostics import diagnose_all_model_aliases, diagnose_model_alias, diagnose_provider_model
-from app.deps import get_settings
 from app.security.internal_auth import require_internal_admin
 from app.storage.provider_health import (
     delete_provider_health_checks,
@@ -22,6 +22,10 @@ router = APIRouter(
     tags=["internal-diagnostics"],
     dependencies=[Depends(require_internal_admin)],
 )
+
+
+def get_settings():
+    return deps.get_settings()
 
 
 class ProviderHealthCheckRequest(BaseModel):

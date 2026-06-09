@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from fastapi import Request
 
+import app.deps as deps
 from app.core.errors import APIError
-from app.deps import get_settings
 from app.security.api_key import hash_api_key
 from app.storage.api_keys import get_api_key_by_hash, mark_api_key_used
 
@@ -18,6 +18,10 @@ class AuthContext:
     allowed_models: list[str] | None
     daily_limit: int | None
     monthly_limit: int | None
+
+
+def get_settings():
+    return deps.get_settings()
 
 
 def _extract_api_key(request: Request) -> str | None:

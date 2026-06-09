@@ -20,7 +20,7 @@ from app.config import Settings
 from app.core.errors import APIError, build_error_response
 from app.core.ephemeral_console_key import rotate_ephemeral_console_api_key_from_env
 from app.core.http_client import close_shared_async_client
-from app.deps import get_settings
+from app.deps import get_settings, set_runtime_settings
 from app.middleware.api_version import APIVersionHeaderMiddleware
 from app.middleware.body_size import BodySizeLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -55,6 +55,7 @@ def validate_runtime_settings(settings: Settings) -> None:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     app_settings = settings or get_settings()
+    set_runtime_settings(app_settings)
     validate_runtime_settings(app_settings)
 
     @asynccontextmanager

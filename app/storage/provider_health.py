@@ -66,6 +66,35 @@ def _safe_parse_metadata(raw: str | None) -> dict[str, Any] | None:
     return parsed
 
 
+def _safe_config_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {"config_source": None, "config_revision": None}
+    return {
+        "config_source": metadata.get("config_source"),
+        "config_revision": metadata.get("config_revision"),
+    }
+
+
+def _decorate_health_row(row: Any) -> dict[str, Any]:
+    metadata = _safe_parse_metadata(row["metadata"])
+    return {
+        "id": row["id"],
+        "provider": row["provider"],
+        "model": row["model"],
+        "model_alias": row["model_alias"],
+        "role": row["role"],
+        "status": row["status"],
+        "error_code": row["error_code"],
+        "error_message": row["error_message"],
+        "latency_ms": int(row["latency_ms"]) if row["latency_ms"] is not None else None,
+        "output_chars": int(row["output_chars"] or 0),
+        "tokens_per_second": float(row["tokens_per_second"]) if row["tokens_per_second"] is not None else None,
+        "checked_at": row["checked_at"],
+        "metadata": metadata,
+        **_safe_config_metadata(metadata),
+    }
+
+
 def _normalize_status(status: str) -> str:
     normalized = str(status or "").strip().lower()
     if normalized in _ALLOWED_STATUS:
@@ -143,6 +172,7 @@ def record_provider_health_check(
         "tokens_per_second": float(tokens_per_second) if tokens_per_second is not None else None,
         "checked_at": checked,
         "metadata": metadata if isinstance(metadata, dict) else None,
+        **_safe_config_metadata(metadata if isinstance(metadata, dict) else None),
     }
 
 
@@ -183,24 +213,7 @@ def list_provider_health_checks(
             rows = conn.execute(sql, tuple(params)).fetchall()
     except sqlite3.OperationalError:
         return []
-    return [
-        {
-            "id": row["id"],
-            "provider": row["provider"],
-            "model": row["model"],
-            "model_alias": row["model_alias"],
-            "role": row["role"],
-            "status": row["status"],
-            "error_code": row["error_code"],
-            "error_message": row["error_message"],
-            "latency_ms": int(row["latency_ms"]) if row["latency_ms"] is not None else None,
-            "output_chars": int(row["output_chars"] or 0),
-            "tokens_per_second": float(row["tokens_per_second"]) if row["tokens_per_second"] is not None else None,
-            "checked_at": row["checked_at"],
-            "metadata": _safe_parse_metadata(row["metadata"]),
-        }
-        for row in rows
-    ]
+    return [_decorate_health_row(row) for row in rows]
 
 
 def get_latest_provider_health(
@@ -245,24 +258,7 @@ def get_latest_provider_health(
             rows = conn.execute(sql, tuple(params)).fetchall()
     except sqlite3.OperationalError:
         return []
-    return [
-        {
-            "id": row["id"],
-            "provider": row["provider"],
-            "model": row["model"],
-            "model_alias": row["model_alias"],
-            "role": row["role"],
-            "status": row["status"],
-            "error_code": row["error_code"],
-            "error_message": row["error_message"],
-            "latency_ms": int(row["latency_ms"]) if row["latency_ms"] is not None else None,
-            "output_chars": int(row["output_chars"] or 0),
-            "tokens_per_second": float(row["tokens_per_second"]) if row["tokens_per_second"] is not None else None,
-            "checked_at": row["checked_at"],
-            "metadata": _safe_parse_metadata(row["metadata"]),
-        }
-        for row in rows
-    ]
+    return [_decorate_health_row(row) for row in rows]
 
 
 def list_recent_health_samples(
@@ -313,21 +309,7 @@ def list_recent_health_samples(
             grouped[key] = []
             
         if len(grouped[key]) < limit_per_target:
-            grouped[key].append({
-                "id": row["id"],
-                "provider": row["provider"],
-                "model": row["model"],
-                "model_alias": row["model_alias"],
-                "role": row["role"],
-                "status": row["status"],
-                "error_code": row["error_code"],
-                "error_message": row["error_message"],
-                "latency_ms": int(row["latency_ms"]) if row["latency_ms"] is not None else None,
-                "output_chars": int(row["output_chars"] or 0),
-                "tokens_per_second": float(row["tokens_per_second"]) if row["tokens_per_second"] is not None else None,
-                "checked_at": row["checked_at"],
-                "metadata": _safe_parse_metadata(row["metadata"]),
-            })
+            grouped[key].append(_decorate_health_row(row))
             
     for target_rows in grouped.values():
         result.extend(target_rows)

@@ -7,6 +7,12 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.2.1] - Unreleased
+
+### Fixed
+- Ensured diagnostics and provider health checks rebuild cached runtime router/orchestrator objects after model config PATCH and reset operations.
+- Added safe top-level provider health metadata for `config_source` and `config_revision` without exposing raw payloads.
+
 ## [1.1.1] - Unreleased
 
 ### Added

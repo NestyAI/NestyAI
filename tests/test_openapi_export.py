@@ -113,7 +113,7 @@ def test_check_flag_fails_when_file_missing(tmp_path, monkeypatch) -> None:
     We monkey-patch the ROOT-relative out_path by temporarily renaming the file.
     """
     out_file = ROOT / "docs" / "openapi.json"
-    backup = tmp_path / "openapi.json.bak"
+    backup = ROOT / "docs" / "openapi.json.bak"
 
     existed = out_file.exists()
     if existed:
@@ -127,6 +127,8 @@ def test_check_flag_fails_when_file_missing(tmp_path, monkeypatch) -> None:
     finally:
         if existed:
             backup.rename(out_file)
+        elif backup.exists():
+            backup.unlink()
 
 
 # ---------------------------------------------------------------------------

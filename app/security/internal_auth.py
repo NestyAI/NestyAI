@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from fastapi import Request
 
+import app.deps as deps
 from app.core.errors import APIError
-from app.deps import get_settings
+
+
+def get_settings():
+    return deps.get_settings()
 
 
 def require_internal_admin(request: Request) -> None:

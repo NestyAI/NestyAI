@@ -13,7 +13,7 @@ from app.core.model_config_loader import (
     list_effective_model_configs,
     validate_model_config_override,
 )
-from app.deps import get_provider_router
+from app.deps import clear_runtime_model_config_caches, get_provider_router
 from app.schemas.chat import ChatMessage
 from app.security.internal_auth import require_internal_admin
 from app.storage.model_configs import (
@@ -100,6 +100,7 @@ async def patch_internal_model_config(model_id: str, body: ModelOverridePatchReq
         changed_by_api_key_id=None,
         changed_by_label=body.changed_by_label or "internal-admin",
     )
+    clear_runtime_model_config_caches()
     effective = get_effective_model_config(model_id) or default_config
     return {
         "ok": True,
@@ -124,6 +125,7 @@ async def reset_internal_model_config(model_id: str, changed_by_label: str = "in
         changed_by_api_key_id=None,
         changed_by_label=changed_by_label,
     )
+    clear_runtime_model_config_caches()
     effective = get_effective_model_config(model_id) or default_config
     return {
         "ok": True,

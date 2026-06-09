@@ -1,7 +1,19 @@
 from __future__ import annotations
 
+from app.deps import get_settings
 from app.storage.db import init_db
 from app.storage.provider_health import record_provider_health_check
+
+
+def _request_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+    headers = dict(extra or {})
+    settings = get_settings()
+    trusted_hosts = str(getattr(settings, "trusted_hosts", "") or "").strip()
+    if trusted_hosts:
+        host = trusted_hosts.split(",")[0].strip()
+        if host:
+            headers["Host"] = host
+    return headers
 
 
 def test_internal_diagnostics_hidden_when_admin_disabled(client, monkeypatch, tmp_path) -> None:
@@ -11,7 +23,7 @@ def test_internal_diagnostics_hidden_when_admin_disabled(client, monkeypatch, tm
         "app.security.internal_auth.get_settings",
         lambda: type("S", (), {"internal_admin_enabled": False, "nesty_internal_admin_token": "abc"})(),
     )
-    response = client.get("/internal/diagnostics/provider-health")
+    response = client.get("/internal/diagnostics/provider-health", headers=_request_headers())
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "internal_admin_disabled"
 
@@ -27,7 +39,7 @@ def test_internal_diagnostics_requires_token(client, monkeypatch, tmp_path) -> N
         "app.api.internal_diagnostics.get_settings",
         lambda: type("S", (), {"diagnostics_enabled": True})(),
     )
-    response = client.get("/internal/diagnostics/provider-health")
+    response = client.get("/internal/diagnostics/provider-health", headers=_request_headers())
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "internal_admin_unauthorized"
 
@@ -43,7 +55,7 @@ def test_internal_diagnostics_disabled_returns_404(client, monkeypatch, tmp_path
         "app.api.internal_diagnostics.get_settings",
         lambda: type("S", (), {"diagnostics_enabled": False})(),
     )
-    response = client.get("/internal/diagnostics/provider-health", headers={"Authorization": "Bearer abc"})
+    response = client.get("/internal/diagnostics/provider-health", headers=_request_headers({"Authorization": "Bearer abc"}))
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "diagnostics_disabled"
 
@@ -69,7 +81,7 @@ def test_internal_provider_health_check_uses_model_alias(client, monkeypatch, tm
     monkeypatch.setattr("app.api.internal_diagnostics.diagnose_model_alias", _mock_diagnose_model_alias)
     response = client.post(
         "/internal/diagnostics/provider-health/check",
-        headers={"Authorization": "Bearer abc"},
+        headers=_request_headers({"Authorization": "Bearer abc"}),
         json={"model_alias": "nesty-combined-1.0", "include_roles": True},
     )
     assert response.status_code == 200
@@ -102,7 +114,7 @@ def test_internal_provider_model_check_endpoint(client, monkeypatch, tmp_path) -
     monkeypatch.setattr("app.api.internal_diagnostics.diagnose_provider_model", _mock_diagnose_provider_model)
     response = client.post(
         "/internal/diagnostics/provider-model/check",
-        headers={"Authorization": "Bearer abc"},
+        headers=_request_headers({"Authorization": "Bearer abc"}),
         json={"provider": "openrouter", "model": "deepseek/deepseek-v4-flash:free"},
     )
     assert response.status_code == 200
@@ -130,7 +142,7 @@ def test_internal_provider_health_check_all_aliases(client, monkeypatch, tmp_pat
     monkeypatch.setattr("app.api.internal_diagnostics.diagnose_all_model_aliases", _mock_diagnose_all)
     response = client.post(
         "/internal/diagnostics/provider-health/check",
-        headers={"Authorization": "Bearer abc"},
+        headers=_request_headers({"Authorization": "Bearer abc"}),
         json={"include_roles": True},
     )
     assert response.status_code == 200
@@ -165,7 +177,7 @@ def test_internal_provider_health_cleanup_endpoint(client, monkeypatch, tmp_path
 
     response = client.delete(
         "/internal/diagnostics/provider-health",
-        headers={"Authorization": "Bearer abc"},
+        headers=_request_headers({"Authorization": "Bearer abc"}),
         params={"provider": "openrouter"},
     )
     assert response.status_code == 200

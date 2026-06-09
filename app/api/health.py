@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
+import app.deps as deps
 from app.core.errors import APIError
-from app.deps import get_settings
 from app.security.auth import require_api_key
 from app.storage.db import get_connection
 from app.version import VERSION
 
 
 router = APIRouter(tags=["health"])
+
+
+def get_settings():
+    return deps.get_settings()
 
 
 @router.get("/health")
