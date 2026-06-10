@@ -11,9 +11,10 @@ All API errors return a standard JSON structure with HTTP status code matching t
 ```json
 {
   "error": {
-    "code": "rate_limit_exceeded",
     "message": "Rate limit exceeded. Please try again later.",
-    "type": "api_error",
+    "type": "rate_limit_error",
+    "param": null,
+    "code": "rate_limit_exceeded",
     "details": {
       "retry_after_seconds": 15
     }
@@ -21,10 +22,11 @@ All API errors return a standard JSON structure with HTTP status code matching t
 }
 ```
 
-*   `code`: A machine-readable string identifying the error subclass.
 *   `message`: A human-readable description of the error.
-*   `type`: A stable error type identifier (e.g. `"api_error"`).
-*   `details`: Optional payload providing structured context (e.g. validation issues, retry durations).
+*   `type`: OpenAI-style error category (`authentication_error`, `invalid_request_error`, `permission_error`, `rate_limit_error`, `provider_error`, `api_error`).
+*   `param`: Optional field name for validation errors; otherwise `null`.
+*   `code`: A machine-readable NestyAI error code (stable; preserved for backward compatibility).
+*   `details`: Optional Nesty additive payload (e.g. validation issues, retry durations).
 
 ---
 
@@ -34,14 +36,19 @@ All API errors return a standard JSON structure with HTTP status code matching t
 *   `invalid_request`: The request payload was malformed or violates schema validation constraints (FastAPI `RequestValidationError` fallback).
 
 ### 2. Authorization & Keys
-*   `missing_api_key`: The required API key was not supplied in headers.
-*   `invalid_api_key`: The supplied API key is invalid or inactive.
-*   `model_not_allowed`: The API key used is unauthorized to access the requested model alias.
+*   `missing_api_key`: The required API key was not supplied in headers. (`type`: `authentication_error`)
+*   `invalid_api_key`: The supplied API key is unknown or inactive without a revocation timestamp. (`type`: `authentication_error`)
+*   `api_key_revoked`: The API key record exists but was revoked. (`type`: `permission_error`, HTTP 403)
+*   `model_not_allowed`: The API key used is unauthorized to access the requested model alias. (`type`: `permission_error`)
+
+**Deferred:** `api_key_disabled` is not emitted in v1.3.1 because there is no public disable workflow yet. Inactive keys without `revoked_at` continue to return `invalid_api_key`.
+
+**OpenAI mapping:** Unknown model aliases return HTTP 400 with `invalid_model` (not 404). External clients may treat this as model-not-found.
 
 ### 3. Rate Limits & Quotas
-*   `rate_limit_exceeded`: Rate limit threshold exceeded. Includes a `details.retry_after_seconds` field.
-*   `daily_quota_exceeded`: The daily token/request budget for the API key has been exhausted.
-*   `monthly_quota_exceeded`: The monthly token/request budget for the API key has been exhausted.
+*   `rate_limit_exceeded`: Short-window throttling. HTTP 429. Includes `details.retry_after_seconds` and `Retry-After` header. Chat responses may include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` when the in-memory limiter runs.
+*   `daily_quota_exceeded`: Daily request quota exhausted. HTTP 429. `details.quota_type` is `"daily"`, `details.limit` is the configured daily cap, and `details.openai_code_alias` is `"quota_exceeded"`.
+*   `monthly_quota_exceeded`: Monthly request quota exhausted. HTTP 429. `details.quota_type` is `"monthly"`, `details.limit` is the configured monthly cap, and `details.openai_code_alias` is `"quota_exceeded"`.
 
 ### 4. Provider Routing & Failures
 *   `invalid_model`: The requested model alias is unrecognized.

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request
 import app.deps as deps
 from app.core.model_config_loader import list_effective_model_configs
 from app.deps import get_models_config
-from app.security.auth import require_api_key
+from app.security.auth import optional_api_key, require_api_key
 from app.schemas.models import ModelCard, ModelListResponse
 
 
@@ -20,7 +20,9 @@ def get_settings():
 async def list_models(request: Request) -> ModelListResponse:
     settings = get_settings()
     if settings.require_api_key and not settings.public_models:
-        require_api_key(request)
+        auth_context = require_api_key(request)
+    else:
+        auth_context = optional_api_key(request)
 
     cards: list[ModelCard] = []
     try:
@@ -42,5 +44,9 @@ async def list_models(request: Request) -> ModelListResponse:
             )
             for model_id, model_profile in config.models.items()
         ]
-    return ModelListResponse(data=cards)
 
+    if auth_context and auth_context.allowed_models:
+        allowed = set(auth_context.allowed_models)
+        cards = [card for card in cards if card.id in allowed]
+
+    return ModelListResponse(data=cards)

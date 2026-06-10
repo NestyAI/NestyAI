@@ -15,6 +15,9 @@ from app.security.auth import AuthContext
 class RateLimitDecision:
     allowed: bool
     retry_after_seconds: int = 0
+    limit: int = 0
+    remaining: int = 0
+    reset_at: int | None = None
 
 
 class InMemoryRateLimiter:
@@ -25,7 +28,7 @@ class InMemoryRateLimiter:
 
     def check(self, key: str, limit: int) -> RateLimitDecision:
         if limit <= 0:
-            return RateLimitDecision(allowed=True, retry_after_seconds=0)
+            return RateLimitDecision(allowed=True, retry_after_seconds=0, limit=0, remaining=0, reset_at=None)
 
         now = time.time()
         oldest_allowed = now - self.window_seconds
@@ -36,10 +39,25 @@ class InMemoryRateLimiter:
 
             if len(events) >= limit:
                 retry_after = max(1, int(math.ceil(self.window_seconds - (now - events[0]))))
-                return RateLimitDecision(allowed=False, retry_after_seconds=retry_after)
+                reset_at = int(math.ceil(events[0] + self.window_seconds))
+                return RateLimitDecision(
+                    allowed=False,
+                    retry_after_seconds=retry_after,
+                    limit=limit,
+                    remaining=0,
+                    reset_at=reset_at,
+                )
 
             events.append(now)
-            return RateLimitDecision(allowed=True, retry_after_seconds=0)
+            remaining = max(0, limit - len(events))
+            reset_at = int(math.ceil(events[0] + self.window_seconds))
+            return RateLimitDecision(
+                allowed=True,
+                retry_after_seconds=0,
+                limit=limit,
+                remaining=remaining,
+                reset_at=reset_at,
+            )
 
     def reset(self) -> None:
         with self._lock:
@@ -65,3 +83,17 @@ def build_rate_limit_key(request: Request, auth_context: AuthContext | None) -> 
 
     host = request.client.host if request.client else "unknown"
     return f"ip:{host}"
+
+
+def build_rate_limit_headers(decision: RateLimitDecision) -> dict[str, str]:
+    if decision.limit <= 0 or decision.reset_at is None:
+        return {}
+
+    headers = {
+        "X-RateLimit-Limit": str(decision.limit),
+        "X-RateLimit-Remaining": str(max(0, decision.remaining)),
+        "X-RateLimit-Reset": str(decision.reset_at),
+    }
+    if not decision.allowed and decision.retry_after_seconds > 0:
+        headers["Retry-After"] = str(decision.retry_after_seconds)
+    return headers

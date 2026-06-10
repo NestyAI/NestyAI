@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
 
 import app.deps as deps
@@ -12,7 +12,7 @@ from app.core.errors import APIError
 from app.guards.input_guard import InputGuard
 from app.schemas.chat import AuthDebugInfo, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ConversationInfo
 from app.security.auth import AuthContext, optional_api_key, require_api_key
-from app.security.rate_limit import build_rate_limit_key, get_rate_limiter
+from app.security.rate_limit import build_rate_limit_headers, build_rate_limit_key, get_rate_limiter
 from app.storage.conversations import (
     add_message,
     get_conversation_summary,
@@ -41,10 +41,14 @@ def get_orchestrator():
 
 
 @router.post("/chat/completions", response_model=ChatCompletionResponse, response_model_exclude_none=True)
-async def chat_completions(request: ChatCompletionRequest, raw_request: Request) -> ChatCompletionResponse | StreamingResponse:
+async def chat_completions(
+    request: ChatCompletionRequest,
+    raw_request: Request,
+    http_response: Response,
+) -> ChatCompletionResponse | StreamingResponse:
     settings = get_settings()
     orchestrator = get_orchestrator()
-    request_id = generate_request_id()
+    request_id = _resolve_request_id(raw_request)
 
     started_at = time.perf_counter()
     auth_context: AuthContext | None = None
@@ -176,6 +180,7 @@ async def chat_completions(request: ChatCompletionRequest, raw_request: Request)
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
+                **_response_rate_limit_headers(raw_request),
             },
         )
 
@@ -244,6 +249,7 @@ async def chat_completions(request: ChatCompletionRequest, raw_request: Request)
 
         if settings.safe_debug_auth and auth_context is not None:
             response.auth = AuthDebugInfo(api_key_id=auth_context.api_key_id, key_name=auth_context.name)
+        http_response.headers.update(_response_rate_limit_headers(raw_request))
         return response
     except APIError as exc:
         error_code = exc.code
@@ -285,12 +291,13 @@ def _apply_pre_chat_checks(settings, request: ChatCompletionRequest, raw_request
         limit_key = build_rate_limit_key(raw_request, auth_context)
         limiter = get_rate_limiter()
         rate_limit = limiter.check(limit_key, settings.rate_limit_requests_per_minute)
+        raw_request.state.rate_limit_decision = rate_limit
         if not rate_limit.allowed:
             raise APIError(
                 code="rate_limit_exceeded",
                 message="Rate limit exceeded. Please try again later.",
                 status_code=429,
-                headers={"Retry-After": str(rate_limit.retry_after_seconds)},
+                headers=build_rate_limit_headers(rate_limit),
                 details={"retry_after_seconds": rate_limit.retry_after_seconds},
             )
 
@@ -301,6 +308,11 @@ def _apply_pre_chat_checks(settings, request: ChatCompletionRequest, raw_request
                 code="daily_quota_exceeded",
                 message="Daily request quota exceeded.",
                 status_code=429,
+                details={
+                    "quota_type": "daily",
+                    "limit": auth_context.daily_limit,
+                    "openai_code_alias": "quota_exceeded",
+                },
             )
 
     if auth_context and auth_context.monthly_limit is not None:
@@ -310,9 +322,28 @@ def _apply_pre_chat_checks(settings, request: ChatCompletionRequest, raw_request
                 code="monthly_quota_exceeded",
                 message="Monthly request quota exceeded.",
                 status_code=429,
+                details={
+                    "quota_type": "monthly",
+                    "limit": auth_context.monthly_limit,
+                    "openai_code_alias": "quota_exceeded",
+                },
             )
 
     return auth_context
+
+
+def _resolve_request_id(raw_request: Request) -> str:
+    request_id = getattr(raw_request.state, "request_id", None)
+    if isinstance(request_id, str) and request_id.strip():
+        return request_id.strip()
+    return generate_request_id()
+
+
+def _response_rate_limit_headers(raw_request: Request) -> dict[str, str]:
+    decision = getattr(raw_request.state, "rate_limit_decision", None)
+    if decision is None:
+        return {}
+    return build_rate_limit_headers(decision)
 
 
 def _sanitize_user_for_storage(content: str) -> str:

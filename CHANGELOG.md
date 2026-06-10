@@ -7,7 +7,39 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
-## [1.2.4] - Unreleased
+## [1.3.1] - Unreleased
+
+### Added
+- Added provider-style API key and usage troubleshooting documentation for external integrations.
+- Added public `X-Request-ID` correlation header on Gateway responses for safer external debugging.
+- Added rate-limit response headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`) on chat routes where the limiter runs.
+
+### Changed
+- Revoked API keys now return HTTP 403 with `api_key_revoked` instead of a generic invalid-key response.
+- Improved quota error clarity with additive `details.quota_type`, `details.limit`, and `details.openai_code_alias`.
+- Improved external C# example error handling with request ID and structured gateway exception metadata.
+
+### Security
+- API key and usage polish preserves public/internal credential separation.
+- Public errors remain sanitized and do not expose provider secrets, internal admin tokens, stack traces, raw provider responses, or hidden prompts.
+
+## [1.3.0] - Unreleased
+
+### Added
+- Added provider-style OpenAI-compatible integration documentation for external projects in `docs/OPENAI_COMPATIBLE_PROVIDER.md`.
+- Added clearer external integration examples for curl, JavaScript, and C# ASP.NET Core clients (`examples/csharp/NestyAiChatService.cs`).
+
+### Changed
+- Improved OpenAI-compatible public API behavior for external provider-style integrations.
+- Improved `/v1/models`, `/v1/chat/completions`, streaming, API key, quota, and model allowlist compatibility where needed.
+- Standardized public error responses toward OpenAI-style error envelopes with `error.type` and `error.param` while preserving existing `error.code` values and `error.details`.
+- Added `created` to model list entries; `/v1/models` filters to API key allowlist when a restricted key is authenticated.
+
+### Security
+- Public integration polish preserves separation between external API keys and internal admin tokens.
+- Error responses remain sanitized and do not expose provider secrets, internal prompts, hidden system messages, stack traces, or raw provider responses.
+
+## [1.2.4] - 2026-06-10
 
 ### Added
 - Added safe, additive orchestration metadata fields to response: `evidence_sources_used`, `planner_metadata_used`, `retrieval_metadata_used`, `quality_guard_applied`, `pro_context_budget_chars`, and `pro_context_truncated`.

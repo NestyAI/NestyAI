@@ -90,8 +90,8 @@ def test_revoked_key_rejected(monkeypatch, tmp_path) -> None:
 
     client = TestClient(_build_test_app())
     response = client.get("/protected", headers={"Authorization": f"Bearer {raw_key}"})
-    assert response.status_code == 401
-    assert response.json()["error"]["code"] == "invalid_api_key"
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "api_key_revoked"
 
 
 def test_x_nesty_header_accepted(monkeypatch, tmp_path) -> None:

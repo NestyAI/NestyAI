@@ -17,12 +17,13 @@ from app.api.internal_embeddings import router as internal_embeddings_router
 from app.api.internal_model_configs import router as internal_model_configs_router
 from app.api.models import router as models_router
 from app.config import Settings
-from app.core.errors import APIError, build_error_response
+from app.core.errors import APIError, build_error_response, validation_error_param
 from app.core.ephemeral_console_key import rotate_ephemeral_console_api_key_from_env
 from app.core.http_client import close_shared_async_client
 from app.deps import get_settings, set_runtime_settings
 from app.middleware.api_version import APIVersionHeaderMiddleware
 from app.middleware.body_size import BodySizeLimitMiddleware
+from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.storage.db import init_db
 from app.utils.logging import get_logger
@@ -82,6 +83,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.add_middleware(BodySizeLimitMiddleware, max_request_body_bytes=app_settings.max_request_body_bytes)
     app.add_middleware(APIVersionHeaderMiddleware)
+    app.add_middleware(RequestIdMiddleware)
 
     if app_settings.security_headers_enabled:
         app.add_middleware(SecurityHeadersMiddleware, enable_hsts=app_settings.enable_hsts)
@@ -118,8 +120,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(internal_api_keys_router)
 
     @app.exception_handler(APIError)
-    async def api_error_handler(_: Request, exc: APIError) -> JSONResponse:
-        payload = build_error_response(exc.code, exc.message, exc.details)
+    async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
+        details = dict(exc.details)
+        request_id = getattr(request.state, "request_id", None)
+        if request_id and "request_id" not in details:
+            details["request_id"] = request_id
+        payload = build_error_response(
+            exc.code,
+            exc.message,
+            details,
+            status_code=exc.status_code,
+        )
         return JSONResponse(status_code=exc.status_code, content=payload, headers=exc.headers)
 
     @app.exception_handler(RequestValidationError)
@@ -141,6 +152,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             code="invalid_request",
             message="Invalid request payload.",
             details={"errors": sanitized_errors},
+            param=validation_error_param(sanitized_errors),
+            status_code=400,
         )
         return JSONResponse(status_code=400, content=payload)
 
@@ -148,9 +161,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def unhandled_error_handler(_: Request, exc: Exception) -> JSONResponse:
         logger.exception("Unhandled server error")
         payload = build_error_response(
-            code="provider_unavailable",
+            code="internal_server_error",
             message="Unexpected server error.",
             details={},
+            status_code=500,
         )
         return JSONResponse(status_code=500, content=payload)
 

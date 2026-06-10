@@ -37,6 +37,8 @@ def test_models_list_shape_and_ids(monkeypatch) -> None:
     for model_card in data["data"]:
         assert "id" in model_card
         assert model_card.get("object") == "model"
+        assert "created" in model_card
+        assert isinstance(model_card["created"], int)
         assert "owned_by" in model_card
         assert "description" in model_card
 

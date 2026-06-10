@@ -41,3 +41,4 @@ tests_tmp/
 Thumbs.db
 
 .agents/
+.cursorignore

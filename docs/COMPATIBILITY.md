@@ -111,17 +111,20 @@ All errors follow the envelope:
 ```json
 {
   "error": {
-    "code": "<machine_code>",
     "message": "<human_readable>",
-    "type": "api_error",
+    "type": "<openai_style_category>",
+    "param": null,
+    "code": "<machine_code>",
     "details": {}
   }
 }
 ```
 
-Stable error codes: `invalid_request`, `authentication_failed`, `rate_limited`,
-`quota_exceeded`, `content_policy_violation`, `provider_unavailable`,
-`model_not_found`, `context_too_long`.
+OpenAI-style `type` values include `authentication_error`, `invalid_request_error`, `permission_error`, `rate_limit_error`, `provider_error`, and `api_error`. Existing `code` strings and the `details` object remain stable for backward compatibility.
+
+**Model not found:** Gateway returns HTTP 400 with code `invalid_model`. External OpenAI-style clients may map this to model-not-found semantics.
+
+See [`OPENAI_COMPATIBLE_PROVIDER.md`](OPENAI_COMPATIBLE_PROVIDER.md) for external integration guidance.
 
 See [`ERRORS.md`](ERRORS.md) for the full catalog.
 

@@ -43,7 +43,19 @@ def _validate_raw_api_key(raw_key: str) -> AuthContext:
     settings = get_settings()
     key_hash = hash_api_key(raw_key, hash_secret=settings.nesty_api_key_hash_secret)
     record = get_api_key_by_hash(settings.nesty_db_path, key_hash)
-    if not record or not record.get("is_active", False):
+    if not record:
+        raise APIError(
+            code="invalid_api_key",
+            message="Invalid or inactive NestyAI API key.",
+            status_code=401,
+        )
+    if not record.get("is_active", False):
+        if record.get("revoked_at"):
+            raise APIError(
+                code="api_key_revoked",
+                message="This API key has been revoked.",
+                status_code=403,
+            )
         raise APIError(
             code="invalid_api_key",
             message="Invalid or inactive NestyAI API key.",

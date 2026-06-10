@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/FastAPI-Production%20Ready-009688" alt="FastAPI" />
   <img src="https://img.shields.io/badge/API-OpenAI%20Compatible-orange" alt="OpenAI Compatible" />
   <img src="https://img.shields.io/badge/streaming-SSE-ff9800" alt="SSE" />
-  <img src="https://img.shields.io/badge/version-1.2.2-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.3.1-blue" alt="Version" />
   <img src="https://img.shields.io/badge/tests-529%20passed-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License: Apache-2.0" />
 </p>
@@ -57,18 +57,11 @@ If you need a gateway that feels lean, but still behaves like a serious producti
 
 ## Current Release Snapshot
 
-- Version: `1.2.2`
-- Public API: OpenAI-compatible chat contract
-- Streaming: SSE with final metadata event
-- Latest test snapshot: `529 passed`
-- Safe metadata additions: `retrieval` and `answer_quality`
-
-`answer_quality` in v1.2.2 is intentionally conservative:
-
-- empty non-stream output gets a safe fallback message
-- explicit first-person search claims can be flagged without rewriting content
-- internal markup reuse stays aligned with the existing output safety path
-- streaming content is not replayed or rewritten
+- Version: `1.3.1`
+- Public API: OpenAI-compatible provider surface at `/v1`
+- External integration guide: [`docs/OPENAI_COMPATIBLE_PROVIDER.md`](docs/OPENAI_COMPATIBLE_PROVIDER.md)
+- Correlation: `X-Request-ID` on public responses
+- Rate limits: `X-RateLimit-*` headers on chat when enabled
 
 ---
 
@@ -285,6 +278,7 @@ Useful scripts:
 ## Documentation Map
 
 - Deployment guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+- **External provider integration:** [`docs/OPENAI_COMPATIBLE_PROVIDER.md`](docs/OPENAI_COMPATIBLE_PROVIDER.md)
 - Technical notes: [`docs/README_TECHNICAL.md`](docs/README_TECHNICAL.md)
 - API contract: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)
 - Error contract: [`docs/ERRORS.md`](docs/ERRORS.md)

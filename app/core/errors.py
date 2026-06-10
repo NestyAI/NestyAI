@@ -69,7 +69,87 @@ ERROR_CODES = {
     "invalid_diagnostic_request",
     "provider_health_unavailable",
     "provider_health_strict_blocked",
+    "internal_server_error",
+    "provider_auth_failed",
+    "provider_model_unavailable",
+    "provider_timeout",
+    "provider_error",
+    "unsupported_parameter",
+    "invalid_message",
+    "api_key_revoked",
 }
+
+
+_AUTHENTICATION_ERROR_CODES = {
+    "missing_api_key",
+    "invalid_api_key",
+}
+
+_PERMISSION_ERROR_CODES = {
+    "model_not_allowed",
+    "conversation_access_denied",
+    "internal_admin_unauthorized",
+    "api_key_revoked",
+}
+
+_RATE_LIMIT_ERROR_CODES = {
+    "rate_limit_exceeded",
+    "daily_quota_exceeded",
+    "monthly_quota_exceeded",
+}
+
+_PROVIDER_ERROR_CODES = {
+    "provider_unavailable",
+    "all_providers_failed",
+    "provider_auth_failed",
+    "provider_model_unavailable",
+    "provider_timeout",
+    "provider_error",
+    "streaming_not_implemented",
+    "streaming_not_supported",
+    "stream_interrupted",
+    "stream_provider_failed",
+    "provider_health_strict_blocked",
+    "embedding_provider_unavailable",
+}
+
+_INVALID_REQUEST_ERROR_CODES = {
+    "invalid_request",
+    "invalid_model",
+    "invalid_search_mode",
+    "invalid_tools_mode",
+    "invalid_orchestration_mode",
+    "invalid_semantic_recall_mode",
+    "invalid_summary_mode",
+    "invalid_conversation_request",
+    "invalid_memory_control_request",
+    "invalid_diagnostic_request",
+    "invalid_search_backend",
+    "request_too_large",
+    "unsupported_parameter",
+    "invalid_message",
+    "model_config_invalid",
+    "embedding_config_invalid",
+    "model_behavior_config_invalid",
+}
+
+
+def resolve_error_type(code: str, status_code: int = 400) -> str:
+    if code in _AUTHENTICATION_ERROR_CODES:
+        return "authentication_error"
+    if code in _PERMISSION_ERROR_CODES:
+        return "permission_error"
+    if code in _RATE_LIMIT_ERROR_CODES:
+        return "rate_limit_error"
+    if code in _PROVIDER_ERROR_CODES:
+        return "provider_error"
+    if code in _INVALID_REQUEST_ERROR_CODES:
+        return "invalid_request_error"
+    if code == "internal_server_error" or status_code >= 500:
+        return "api_error"
+    if status_code == 404:
+        return "invalid_request_error"
+    return "api_error"
 
 
 @dataclass
@@ -99,12 +179,30 @@ class StreamingNotSupportedError(ProviderError):
         super().__init__(provider=provider, message="Streaming is not supported by this provider.", retryable=True)
 
 
-def build_error_response(code: str, message: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_error_response(
+    code: str,
+    message: str,
+    details: dict[str, Any] | None = None,
+    *,
+    param: str | None = None,
+    status_code: int = 400,
+) -> dict[str, Any]:
     return {
         "error": {
-            "code": code,
             "message": message,
-            "type": "api_error",
+            "type": resolve_error_type(code, status_code=status_code),
+            "param": param,
+            "code": code,
             "details": details or {},
         }
     }
+
+
+def validation_error_param(errors: list[dict[str, Any]]) -> str | None:
+    if not errors:
+        return None
+    loc = errors[0].get("loc")
+    if not isinstance(loc, (list, tuple)) or not loc:
+        return None
+    tail = loc[-1]
+    return str(tail) if tail is not None else None

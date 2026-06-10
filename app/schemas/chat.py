@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.tools import SourceItem, ToolMetadata
 
@@ -13,11 +13,20 @@ class ChatMessage(BaseModel):
 
 
 class ChatCompletionRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     model: str
     messages: list[ChatMessage] = Field(min_length=1)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, gt=0)
     stream: bool = False
+    top_p: float | None = None
+    stop: str | list[str] | None = None
+    presence_penalty: float | None = None
+    frequency_penalty: float | None = None
+    user: str | None = None
+    metadata: dict[str, Any] | None = None
+    tool_choice: str | dict[str, Any] | None = None
     search: str = "auto"
     tools: str | list[str] = "auto"
     orchestration: str = "auto"

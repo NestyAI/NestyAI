@@ -30,7 +30,7 @@ def test_error_shape_invalid_model(monkeypatch) -> None:
     assert "error" in data
     assert data["error"]["code"] == "invalid_model"
     assert "message" in data["error"]
-    assert data["error"]["type"] == "api_error"
+    assert data["error"]["type"] == "invalid_request_error"
 
 
 def test_error_shape_invalid_search_mode(monkeypatch) -> None:
@@ -58,7 +58,7 @@ def test_error_shape_invalid_search_mode(monkeypatch) -> None:
     assert "error" in data
     assert data["error"]["code"] == "invalid_search_mode"
     assert "message" in data["error"]
-    assert data["error"]["type"] == "api_error"
+    assert data["error"]["type"] == "invalid_request_error"
 
 
 def test_error_shape_missing_api_key_when_auth_enabled(monkeypatch) -> None:
@@ -88,4 +88,4 @@ def test_error_shape_missing_api_key_when_auth_enabled(monkeypatch) -> None:
     assert "error" in data
     assert data["error"]["code"] == "missing_api_key"
     assert "message" in data["error"]
-    assert data["error"]["type"] == "api_error"
+    assert data["error"]["type"] == "authentication_error"

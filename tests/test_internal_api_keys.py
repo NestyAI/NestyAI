@@ -323,14 +323,14 @@ def test_t1_revoke_key_prevents_use(mock_client) -> None:
     # Revoke key
     client.post(f"/internal/api-keys/{k['api_key']['id']}/revoke", headers={"Authorization": "Bearer admin-token"}, json={})
     
-    # Use revoked key -> should fail (returns 401)
+    # Use revoked key -> should fail (returns 403)
     chat_resp = client.post(
         "/v1/chat/completions",
         headers={"Authorization": f"Bearer {raw_key}"},
         json={"model": "nesty-flash-1.0", "messages": [{"role": "user", "content": "hi"}]}
     )
-    assert chat_resp.status_code == 401
-    assert chat_resp.json()["error"]["code"] == "invalid_api_key"
+    assert chat_resp.status_code == 403
+    assert chat_resp.json()["error"]["code"] == "api_key_revoked"
 
 
 # Feature 5: PATCH /internal/api-keys/{id} (Update key)
@@ -823,8 +823,8 @@ def test_t4_key_lifecycle_full_workflow(mock_client) -> None:
         headers={"Authorization": f"Bearer {raw_key}"},
         json={"model": "nesty-flash-1.0", "messages": [{"role": "user", "content": "hello after revoke"}]}
     )
-    assert chat_resp3.status_code == 401
-    assert chat_resp3.json()["error"]["code"] == "invalid_api_key"
+    assert chat_resp3.status_code == 403
+    assert chat_resp3.json()["error"]["code"] == "api_key_revoked"
 
 
 def test_t4_quota_limits_blocking(mock_client) -> None:

@@ -149,6 +149,8 @@ def test_models_list_guaranteed_shape(client) -> None:
         assert "id" in item
         assert "object" in item
         assert item["object"] == "model"
+        assert "created" in item
+        assert isinstance(item["created"], int)
         # owned_by is a guaranteed field (defaults to "nestyai")
         assert "owned_by" in item
 
