@@ -19,59 +19,13 @@ class ToolPlanDecision:
     clarification_reason: str | None = None
 
 
-_TOOL_KEYWORDS: dict[str, list[str]] = {
-    "calculator": [
-        "calculate",
-        "compute",
-        "tinh",
-        "bao nhieu",
-        "%",
-        "+",
-        "-",
-        "*",
-        "/",
-        " chia ",
-        " nhan ",
-    ],
-    "wikipedia_lookup": [
-        "what is",
-        "who is",
-        "define",
-        "definition",
-        "la gi",
-        "dinh nghia",
-        "khai niem",
-        "ai la",
-    ],
-    "package_version_lookup": [
-        "latest version",
-        "version",
-        "release",
-        "changelog",
-        "npm",
-        "pypi",
-        "pip",
-        "package",
-        "phan ban",
-        "ban moi nhat",
-    ],
-    "weather_lookup": [
-        "weather",
-        "thoi tiet",
-        "nhiet do",
-        "rain",
-        "mua",
-        "forecast",
-        "du bao",
-    ],
-    "exchange_rate": [
-        "exchange rate",
-        "ty gia",
-        "doi tien",
-        "currency",
-        "convert",
-    ],
-}
+def _tool_match_reason(tools: list[str]) -> str:
+    if not tools:
+        return "no_deterministic_tool_intent"
+    if len(tools) == 1:
+        return f"matched_{tools[0]}"
+    return "matched_multiple_tools"
+
 
 _PACKAGE_INTENT_TERMS = [
     "latest version",
@@ -130,6 +84,44 @@ _REPO_OR_CODE_TERMS = [
     "troubleshoot",
     "fix",
 ]
+
+
+_DETERMINISTIC_TOOLS = frozenset(
+    {
+        "calculator",
+        "weather_lookup",
+        "exchange_rate",
+        "package_version_lookup",
+        "wikipedia_lookup",
+    }
+)
+
+
+def should_skip_web_search_for_tools(
+    tool_plan: ToolPlanDecision,
+    explicit_search_mode: str,
+    message: str = "",
+) -> bool:
+    if str(explicit_search_mode or "auto").strip().lower() == "on":
+        return False
+    if tool_plan.decision != "tool_selected" or not tool_plan.tools_planned:
+        return False
+    if not all(tool_name in _DETERMINISTIC_TOOLS for tool_name in tool_plan.tools_planned):
+        return False
+
+    normalized = f" {_normalize_text(message)} "
+    planned = set(tool_plan.tools_planned)
+    if _looks_like_weather_intent(normalized) and "weather_lookup" not in planned:
+        return False
+    if _looks_like_exchange_intent(normalized) and "exchange_rate" not in planned:
+        return False
+    if _looks_like_package_intent(normalized) and "package_version_lookup" not in planned:
+        return False
+    if _looks_like_wikipedia_intent(normalized) and "wikipedia_lookup" not in planned:
+        return False
+    if _looks_like_calculator_intent(normalized) and "calculator" not in planned:
+        return False
+    return True
 
 
 def _normalize_text(text: str) -> str:
@@ -293,7 +285,7 @@ def _detect_tools_with_validation(message: str, model_config: dict, explicit_too
             return ToolPlanDecision(
                 decision="tool_selected",
                 tools_planned=selected,
-                reason="explicit_tools",
+                reason=_tool_match_reason(selected),
                 clarification_needed=bool(clarification_needed or missing_reason),
                 clarification_reason=clarification_reason or missing_reason,
             )
@@ -332,7 +324,7 @@ def _detect_tools_with_validation(message: str, model_config: dict, explicit_too
         return ToolPlanDecision(
             decision="tool_selected",
             tools_planned=planned,
-            reason="auto_planner",
+            reason=_tool_match_reason(planned),
             clarification_needed=bool(missing_reason),
             clarification_reason=missing_reason,
         )

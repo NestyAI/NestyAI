@@ -150,8 +150,16 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
         "search": {
           "enabled": false,
           "query": null,
+          "queries": [],
           "failed": false,
           "results_count": 0,
+          "filtered_result_count": null,
+          "provider": null,
+          "latency_ms": null,
+          "error_code": null,
+          "cache_hit": false,
+          "context_chars": null,
+          "decision_reason": null,
           "used": false
         },
         "used": [],
@@ -196,7 +204,10 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
       "answer_quality": {
         "checked": false,
         "flags": [],
-        "action": "none"
+        "action": "none",
+        "empty_before_fallback": false,
+        "retry_attempted": false,
+        "sanitized_empty": false
       },
       "planner": {
         "search_decision": "no_search_needed",
@@ -207,6 +218,16 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
         "tools_used": [],
         "clarification_needed": false
       },
+      "retrieval": {
+        "context_used": false,
+        "search_sources": []
+      },
+      "lifecycle_events": [
+        {
+          "type": "chat.request_started",
+          "status": "ok"
+        }
+      ],
       "auth": null,
       "conversation": {
         "id": "conv_123",

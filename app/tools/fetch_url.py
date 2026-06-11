@@ -97,7 +97,11 @@ async def fetch_url_text(
 ) -> FetchResult:
     is_safe, error_code = await asyncio.to_thread(_is_safe_public_url, url)
     if not is_safe:
-        return FetchResult(url=url, error=error_code or "unsafe_url_blocked")
+        return FetchResult(
+            url=url,
+            error=error_code or "unsafe_url_blocked",
+            blocked_reason=error_code or "unsafe_url_blocked",
+        )
 
     try:
         async with httpx.AsyncClient(
@@ -107,7 +111,7 @@ async def fetch_url_text(
         ) as client:
             response = await client.get(url, headers={"User-Agent": "NestyAI/0.2.0"})
     except Exception:
-        return FetchResult(url=url, error="fetch_failed")
+        return FetchResult(url=url, error="fetch_failed", blocked_reason="fetch_failed")
 
     content = response.content[: max_response_size_bytes + 1]
     if len(content) > max_response_size_bytes:
@@ -115,6 +119,8 @@ async def fetch_url_text(
             url=url,
             final_url=str(response.url),
             error="fetch_failed",
+            status_code=response.status_code,
+            blocked_reason="response_too_large",
         )
 
     content_type = response.headers.get("content-type", "").lower()
@@ -127,13 +133,18 @@ async def fetch_url_text(
             title=title,
             text=text,
             error=None,
+            status_code=response.status_code,
+            content_chars=len(text),
         )
 
     text = content.decode(response.encoding or "utf-8", errors="ignore")
+    normalized = " ".join(text.split())
     return FetchResult(
         url=url,
         final_url=str(response.url),
         title=None,
-        text=" ".join(text.split()),
+        text=normalized,
         error=None,
+        status_code=response.status_code,
+        content_chars=len(normalized),
     )

@@ -157,6 +157,32 @@ def _build_registry(web_search_handler: Callable[..., tuple[list[SearchResult], 
     )
     registry.register_helper("datetime.now", lambda: {"iso": "2026-06-10T08:00:00+07:00", "date": "2026-06-10", "time": "08:00:00", "timezone": "Asia/Ho_Chi_Minh"})
     registry.register_helper("web.search", web_search_handler)
+
+    async def web_search_multi_handler(
+        queries,
+        max_results,
+        timeout_seconds,
+        cache_enabled,
+        cache_ttl_seconds,
+    ):
+        from app.tools.web_search import WebSearchMeta
+
+        primary_query = queries[0] if queries else ""
+        results, failed = await web_search_handler(
+            primary_query,
+            max_results,
+            timeout_seconds,
+            cache_enabled,
+            cache_ttl_seconds,
+        )
+        return results, WebSearchMeta(
+            queries=list(queries),
+            failed=failed,
+            result_count=len(results),
+            filtered_result_count=0,
+        )
+
+    registry.register_helper("web.search.multi", web_search_multi_handler)
     return registry
 
 

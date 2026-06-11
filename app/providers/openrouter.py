@@ -8,6 +8,7 @@ import httpx
 from app.core.errors import MissingAPIKeyError, ProviderError
 from app.core.http_client import get_shared_async_client
 from app.providers.base import BaseProvider
+from app.providers.content_extract import extract_choice_message_content, extract_delta_content
 from app.schemas.chat import ChatMessage
 from app.schemas.provider import ProviderChatResult, ProviderStreamChunk, ProviderUsage
 
@@ -84,9 +85,7 @@ class OpenRouterProvider(BaseProvider):
             ) from exc
         choices = data.get("choices") or []
         first_choice = choices[0] if choices else {}
-        content = first_choice.get("message", {}).get("content", "")
-        if not isinstance(content, str):
-            content = str(content)
+        content = extract_choice_message_content(first_choice if isinstance(first_choice, dict) else {})
         usage_raw = data.get("usage", {})
         usage = ProviderUsage(
             prompt_tokens=int(usage_raw.get("prompt_tokens", 0) or 0),
@@ -162,12 +161,10 @@ class OpenRouterProvider(BaseProvider):
                     choices = data.get("choices") or []
                     for choice in choices:
                         delta_obj = choice.get("delta") or {}
-                        content = delta_obj.get("content")
+                        content = extract_delta_content(delta_obj if isinstance(delta_obj, dict) else {})
                         finish_reason = choice.get("finish_reason")
-                        if content is None:
-                            content = ""
                         yield ProviderStreamChunk(
-                            delta=str(content),
+                            delta=content,
                             finish_reason=str(finish_reason) if finish_reason else None,
                         )
         except httpx.TimeoutException as exc:

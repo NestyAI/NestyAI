@@ -111,8 +111,9 @@ async def execute_weather_lookup(message: str, context: dict[str, Any] | None = 
         return ToolResult(
             name="weather_lookup",
             success=False,
-            content="Weather lookup failed.",
+            content=f"Weather lookup is unavailable for '{location}' right now.",
             error=error_code,
+            data={"location": location, "provider": "open-meteo", "error_code": error_code},
             confidence="low",
             latency_ms=int((time.perf_counter() - started) * 1000),
         )

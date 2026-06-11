@@ -5,10 +5,13 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from urllib.parse import urlparse
+
 from app.config import ModelProfile, ModelsConfig, Settings
 from app.core.internal_tool_markup import sanitize_internal_tool_markup
 from app.core.errors import APIError
 from app.core.answer_quality import evaluate_answer_quality
+from app.core.lifecycle_events import LifecycleEventCollector
 from app.core.model_config_loader import get_effective_model_config
 from app.core.model_behavior import apply_behavior_defaults, build_behavior_system_instruction
 from app.core.context_assembler import ContextItem, ContextAssemblyResult, assemble_hybrid_context, build_context_item
@@ -38,11 +41,13 @@ from app.schemas.chat import (
     ProviderHealthInfo,
     RetrievalInfo,
     SemanticRecallInfo,
+    LifecycleEventInfo,
     Usage,
 )
 from app.schemas.tools import SearchResult, SourceItem, ToolExecutionMetadata, ToolMetadata
 from app.storage.db import get_connection
-from app.tools.planner import ToolPlanDecision, plan_tools, plan_tools_decision
+from app.tools.planner import ToolPlanDecision, plan_tools, plan_tools_decision, should_skip_web_search_for_tools
+from app.tools.search_query_planner import plan_search_queries
 from app.tools.registry import ToolRegistry
 from app.tools.search_intent import SearchPlanDecision, plan_search_intent
 from app.utils.ids import generate_chat_completion_id
@@ -72,6 +77,7 @@ class StreamOutcome:
     answer_quality: AnswerQualityInfo = field(default_factory=AnswerQualityInfo)
     planner: PlannerInfo = field(default_factory=PlannerInfo)
     retrieval: RetrievalInfo = field(default_factory=RetrievalInfo)
+    lifecycle_events: list[LifecycleEventInfo] = field(default_factory=list)
 
 
 @dataclass
@@ -132,11 +138,14 @@ class ChatOrchestrator:
         request = request.model_copy(update=apply_behavior_defaults(request, model_profile_obj.model_dump()))
 
         started_at = time.perf_counter()
+        lifecycle = LifecycleEventCollector(request_id=request_id, model_alias=request.model)
+        lifecycle.emit("chat.request_started")
         tools_mode = self._normalize_and_validate_request(request)
         messages, input_guard_info, tools_meta, sources, semantic_recall, retrieval, planner = await self._prepare_chat_context(
             request_id=request_id,
             request=request,
             tools_mode=tools_mode,
+            lifecycle=lifecycle,
         )
 
         try:
@@ -274,7 +283,7 @@ class ChatOrchestrator:
                     )
                     orchestration = self._sanitize_orchestration_metadata(orchestration)
 
-            if not response_text:
+            if not str(response_text or "").strip():
                 route_result = await self.router.route_chat(
                     request_id=request_id,
                     model_alias=request.model,
@@ -294,12 +303,60 @@ class ChatOrchestrator:
                 )
 
             output_guard_info = GuardInfo()
-            response_text, output_safety = self._sanitize_internal_tool_markup_response(response_text)
-            if orchestration_markup_removed:
-                output_safety.internal_tool_markup_detected = True
-                output_safety.internal_tool_markup_removed = True
-            if self.enable_output_guard:
-                response_text, output_guard_info = self.output_guard.scan_text(response_text)
+            response_text, output_safety, output_guard_info = self._finalize_response_text(
+                response_text,
+                orchestration_markup_removed=orchestration_markup_removed,
+            )
+
+            empty_retry_attempted = False
+            empty_before_quality_check = not str(response_text or "").strip()
+            if (
+                not str(response_text or "").strip()
+                and self._should_retry_empty_answer(
+                    retrieval=retrieval,
+                    tools_meta=tools_meta,
+                    planner=planner,
+                    orchestration=orchestration,
+                )
+            ):
+                empty_retry_attempted = True
+                route_result = await self.router.route_chat(
+                    request_id=request_id,
+                    model_alias=request.model,
+                    messages=messages,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                )
+                response_text = route_result.provider_result.content
+                provider_used = route_result.provider_used
+                raw_provider_health = getattr(route_result, "provider_health", None)
+                if isinstance(raw_provider_health, dict):
+                    provider_health_info = ProviderHealthInfo.model_validate(raw_provider_health)
+                usage = Usage(
+                    prompt_tokens=usage.prompt_tokens + route_result.provider_result.usage.prompt_tokens,
+                    completion_tokens=usage.completion_tokens + route_result.provider_result.usage.completion_tokens,
+                    total_tokens=usage.total_tokens + route_result.provider_result.usage.total_tokens,
+                )
+                response_text, output_safety, output_guard_info = self._finalize_response_text(
+                    response_text,
+                    orchestration_markup_removed=False,
+                )
+                log_safe(
+                    self.logger,
+                    "empty_answer_retry",
+                    request_id=request_id,
+                    model_alias=request.model,
+                    provider_used=provider_used,
+                    error_code="",
+                )
+
+            if provider_used:
+                lifecycle.emit(
+                    "chat.provider_selected",
+                    provider=provider_used,
+                    status="retry" if empty_retry_attempted else "ok",
+                )
+
             response_text, answer_quality = evaluate_answer_quality(
                 response_text,
                 retrieval=retrieval,
@@ -309,9 +366,29 @@ class ChatOrchestrator:
                 output_safety=output_safety,
                 streaming=False,
             )
+            if empty_retry_attempted or answer_quality.action == "fallback_empty":
+                quality_updates: dict[str, object] = {
+                    "retry_attempted": empty_retry_attempted,
+                    "empty_before_fallback": empty_before_quality_check and answer_quality.action == "fallback_empty",
+                }
+                answer_quality = answer_quality.model_copy(update=quality_updates)
+            if empty_retry_attempted:
+                answer_quality = answer_quality.model_copy(
+                    update={
+                        "flags": self._merge_quality_flags(answer_quality.flags, ["empty_retry_attempted"]),
+                    }
+                )
+            if answer_quality.flags:
+                lifecycle.emit(
+                    "answer_quality.flagged",
+                    status="flagged",
+                    error_code=answer_quality.flags[0],
+                    count=len(answer_quality.flags),
+                )
 
             combined_guard = self._combine_guard_info(input_guard_info, output_guard_info)
             latency_ms = int((time.perf_counter() - started_at) * 1000)
+            lifecycle.emit("chat.completed", latency_ms=latency_ms, provider=provider_used or None)
             log_safe(
                 self.logger,
                 "chat_completed",
@@ -346,6 +423,7 @@ class ChatOrchestrator:
                 answer_quality=answer_quality,
                 planner=planner,
                 retrieval=retrieval,
+                lifecycle_events=self._lifecycle_event_models(lifecycle),
                 model_alias=request.model,
             )
         except APIError as exc:
@@ -373,10 +451,13 @@ class ChatOrchestrator:
             )
         request = request.model_copy(update=apply_behavior_defaults(request, model_profile_obj.model_dump()))
         tools_mode = self._normalize_and_validate_request(request)
+        lifecycle = LifecycleEventCollector(request_id=request_id, model_alias=request.model)
+        lifecycle.emit("chat.request_started")
         messages, input_guard_info, tools_meta, sources, semantic_recall, retrieval, planner = await self._prepare_chat_context(
             request_id=request_id,
             request=request,
             tools_mode=tools_mode,
+            lifecycle=lifecycle,
         )
         context_metadata = self._build_orchestration_context_metadata(
             request=request,
@@ -529,6 +610,9 @@ class ChatOrchestrator:
             outcome.guard = self._combine_guard_info(input_guard_info, output_guard_info)
             outcome.status = "success"
             outcome.error_code = ""
+            lifecycle.emit("chat.provider_selected", provider=stream_result.provider_used)
+            lifecycle.emit("chat.completed", provider=stream_result.provider_used)
+            outcome.lifecycle_events = self._lifecycle_event_models(lifecycle)
 
             yield self._to_sse(
                 {
@@ -564,6 +648,7 @@ class ChatOrchestrator:
                     "answer_quality": outcome.answer_quality.model_dump(),
                     "planner": outcome.planner.model_dump(),
                     "retrieval": outcome.retrieval.model_dump(),
+                    "lifecycle_events": [item.model_dump(exclude_none=True) for item in outcome.lifecycle_events],
                     "conversation": (
                         ConversationInfo(
                             id=outcome.conversation_id,
@@ -581,6 +666,76 @@ class ChatOrchestrator:
             yield self._done_sse()
 
         return StreamHandle(events=stream_events(), outcome=outcome)
+
+    @staticmethod
+    def _lifecycle_event_models(collector: LifecycleEventCollector | None) -> list[LifecycleEventInfo]:
+        if collector is None:
+            return []
+        return [LifecycleEventInfo.model_validate(item) for item in collector.to_metadata()]
+
+    @staticmethod
+    def _compact_search_source_labels(sources: list[SourceItem], *, limit: int = 8) -> list[str]:
+        labels: list[str] = []
+        seen: set[str] = set()
+        for item in sources:
+            title = str(item.title or "").strip()
+            domain = urlparse(str(item.url or "")).netloc.strip().lower()
+            label = title[:80] if title else domain
+            if domain and title:
+                label = f"{title[:60]} ({domain})"
+            key = label.lower()
+            if not label or key in seen:
+                continue
+            seen.add(key)
+            labels.append(label)
+            if len(labels) >= limit:
+                break
+        return labels
+
+    @staticmethod
+    def _merge_quality_flags(existing: list[str], extra: list[str]) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for flag in [*extra, *existing]:
+            normalized = str(flag or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            ordered.append(normalized)
+        return ordered
+
+    @staticmethod
+    def _should_retry_empty_answer(
+        *,
+        retrieval: RetrievalInfo,
+        tools_meta: ToolMetadata,
+        planner: PlannerInfo,
+        orchestration: OrchestrationInfo,
+    ) -> bool:
+        if bool(getattr(retrieval, "context_used", False)) or bool(getattr(retrieval, "search_used", False)):
+            return True
+        if bool(getattr(tools_meta, "used", None)):
+            return True
+        if bool(getattr(planner, "search_used", False)) or bool(getattr(planner, "tools_used", None)):
+            return True
+        if bool(getattr(orchestration, "used", False)):
+            return True
+        return False
+
+    def _finalize_response_text(
+        self,
+        response_text: str,
+        *,
+        orchestration_markup_removed: bool,
+    ) -> tuple[str, OutputSafetyInfo, GuardInfo]:
+        output_guard_info = GuardInfo()
+        response_text, output_safety = self._sanitize_internal_tool_markup_response(response_text)
+        if orchestration_markup_removed:
+            output_safety.internal_tool_markup_detected = True
+            output_safety.internal_tool_markup_removed = True
+        if self.enable_output_guard:
+            response_text, output_guard_info = self.output_guard.scan_text(response_text)
+        return response_text, output_safety, output_guard_info
 
     @staticmethod
     def _sanitize_internal_tool_markup_response(text: str) -> tuple[str, OutputSafetyInfo]:
@@ -627,6 +782,7 @@ class ChatOrchestrator:
         request_id: str,
         request: ChatCompletionRequest,
         tools_mode: str | list[str],
+        lifecycle: LifecycleEventCollector | None = None,
     ) -> tuple[list[ChatMessage], GuardInfo, ToolMetadata, list[SourceItem], SemanticRecallInfo, RetrievalInfo, PlannerInfo]:
         model_profile = self._resolve_model_profile(request.model)
         if not model_profile:
@@ -856,6 +1012,8 @@ class ChatOrchestrator:
             tools_meta=tools_meta,
             request_id=request_id,
             search_plan=search_plan,
+            tool_plan=tool_plan,
+            lifecycle=lifecycle,
         )
         sources.extend(search_sources)
         tools_meta.used.extend(search_used_tools)
@@ -872,6 +1030,7 @@ class ChatOrchestrator:
             tools_mode=tools_mode,
             model_alias=request.model,
             request_id=request_id,
+            lifecycle=lifecycle,
         )
         tools_meta.used.extend(tool_used)
         tools_meta.executions = executions
@@ -898,6 +1057,7 @@ class ChatOrchestrator:
             fts_used=fts_used,
             tool_context_used=bool(tool_context_items),
             tools_meta=tools_meta,
+            sources=sources,
         )
 
         return messages, input_guard_info, tools_meta, sources, semantic_recall_info, retrieval_info, planner_info
@@ -936,29 +1096,55 @@ class ChatOrchestrator:
         tools_meta: ToolMetadata,
         request_id: str,
         search_plan: SearchPlanDecision,
+        tool_plan: ToolPlanDecision,
+        lifecycle: LifecycleEventCollector | None = None,
     ) -> tuple[list[SourceItem], list[str], list[ContextItem], bool]:
         if not search_plan.should_use:
             tools_meta.search.enabled = bool(search_plan.search_planned)
             tools_meta.search.used = False
             tools_meta.search.query = None
+            tools_meta.search.queries = []
+            tools_meta.search.decision_reason = search_plan.reason
+            return [], [], [], False
+
+        if should_skip_web_search_for_tools(tool_plan, str(request.search or "auto"), latest_user_message):
+            tools_meta.search.enabled = True
+            tools_meta.search.used = False
+            tools_meta.search.query = None
+            tools_meta.search.queries = []
+            tools_meta.search.decision_reason = "skipped_deterministic_tool"
+            if lifecycle is not None:
+                lifecycle.emit("search.started", status="skipped", count=0)
             return [], [], [], False
 
         search_sources: list[SourceItem] = []
         used_tools: list[str] = ["current_datetime", "web_search"]
         context_items: list[ContextItem] = []
         tools_meta.search.enabled = True
-        tools_meta.search.query = latest_user_message
+        planned_queries = plan_search_queries(latest_user_message)
+        if not planned_queries:
+            planned_queries = [latest_user_message.strip()]
+        tools_meta.search.query = planned_queries[0]
+        tools_meta.search.queries = planned_queries
         tools_meta.search.used = False
+        tools_meta.search.decision_reason = search_plan.reason
+        if lifecycle is not None:
+            lifecycle.emit("search.started", count=len(planned_queries))
         datetime_context = self._get_current_datetime_context()
-        search_results, search_failed = await self._run_web_search(
-            query=latest_user_message,
+        search_results, search_meta = await self._run_web_search(
+            queries=planned_queries,
             max_results=int(model_profile.get("max_search_results", 5)),
         )
-        tools_meta.search.failed = search_failed
+        tools_meta.search.failed = search_meta.failed
         tools_meta.search.results_count = len(search_results)
+        tools_meta.search.filtered_result_count = search_meta.filtered_result_count
+        tools_meta.search.provider = search_meta.provider
+        tools_meta.search.latency_ms = search_meta.latency_ms
+        tools_meta.search.error_code = search_meta.error_code
+        tools_meta.search.cache_hit = search_meta.cache_hit
         actual_search_used = False
 
-        if search_failed and request.search == "on":
+        if search_meta.failed and request.search == "on":
             raise APIError(
                 code="search_failed",
                 message="Web search failed while search mode is forced on.",
@@ -970,6 +1156,7 @@ class ChatOrchestrator:
                 search_results=search_results,
                 max_context_chars=int(model_profile.get("max_context_chars", 6000)),
             )
+            tools_meta.search.context_chars = context_meta.context_chars
             if context_text:
                 if datetime_context:
                     context_text = f"{datetime_context}\n\n{context_text}"
@@ -981,10 +1168,22 @@ class ChatOrchestrator:
                         source="search",
                         content=context_text,
                         title="Web search context",
-                        metadata={"result_count": len(search_results)},
+                        score=0.9,
+                        metadata={
+                            "result_count": len(search_results),
+                            "queries": planned_queries,
+                            "provider": search_meta.provider,
+                        },
                     )
                 )
                 actual_search_used = True
+            if lifecycle is not None:
+                lifecycle.emit(
+                    "search.completed",
+                    count=len(search_results),
+                    latency_ms=search_meta.latency_ms,
+                    provider=search_meta.provider,
+                )
             log_safe(
                 self.logger,
                 "context_sanitized",
@@ -995,7 +1194,14 @@ class ChatOrchestrator:
                 context_chars=context_meta.context_chars,
                 sources_count=context_meta.sources_count,
             )
-        elif search_failed and request.search == "auto":
+        elif search_meta.failed and request.search == "auto":
+            if lifecycle is not None:
+                lifecycle.emit(
+                    "search.failed",
+                    status="failed",
+                    error_code=search_meta.error_code or "search_failed",
+                    latency_ms=search_meta.latency_ms,
+                )
             context_items.append(
                 build_context_item(
                     source="search",
@@ -1004,7 +1210,8 @@ class ChatOrchestrator:
                         "Answer using existing knowledge and clearly mention possible uncertainty."
                     ),
                     title="Search notice",
-                    metadata={"failed": True},
+                    score=0.5,
+                    metadata={"failed": True, "error_code": search_meta.error_code or "search_failed"},
                 )
             )
 
@@ -1042,6 +1249,7 @@ class ChatOrchestrator:
         tools_mode: str | list[str],
         model_alias: str,
         request_id: str,
+        lifecycle: LifecycleEventCollector | None = None,
     ) -> tuple[list[SourceItem], list[str], list[ToolExecutionMetadata], list[ContextItem]]:
         if not planned_tools:
             return [], [], [], []
@@ -1062,6 +1270,14 @@ class ChatOrchestrator:
                 },
             )
             used.append(tool_name)
+            if lifecycle is not None:
+                lifecycle.emit(
+                    "tool.called" if result.success else "tool.failed",
+                    status="ok" if result.success else "failed",
+                    tool=tool_name,
+                    error_code=result.error if not result.success else None,
+                    latency_ms=result.latency_ms,
+                )
             executions.append(
                 ToolExecutionMetadata(
                     name=tool_name,
@@ -1070,6 +1286,8 @@ class ChatOrchestrator:
                     cache_hit=result.cache_hit,
                     confidence=result.confidence,
                     error=result.error if not result.success else None,
+                    error_code=result.error if not result.success else None,
+                    result_chars=len(str(result.content or "")),
                 )
             )
             if result.sources:
@@ -1123,21 +1341,26 @@ class ChatOrchestrator:
 
         return self._dedupe_sources(sources), used, executions, context_items
 
-    async def _run_web_search(self, query: str, max_results: int) -> tuple[list[SearchResult], bool]:
-        tool = self.tool_registry.get_helper("web.search")
+    async def _run_web_search(self, queries: list[str], max_results: int):
+        from app.tools.web_search import WebSearchMeta
+
+        tool = self.tool_registry.get_helper("web.search.multi")
         if tool is None:
-            return [], True
+            return [], WebSearchMeta(queries=queries, failed=True, error_code="search_unavailable")
         tools_config = self.guard_rules.get("tools", {})
         cache_config = self.guard_rules.get("tool_cache", {}).get("web_search", {})
         timeout_seconds = float(tools_config.get("search_timeout_seconds", 8))
-        results, failed = await tool(
-            query=query,
+        cleaned_queries = [query.strip() for query in queries if str(query or "").strip()]
+        if not cleaned_queries:
+            return [], WebSearchMeta(queries=[], failed=True, error_code="empty_query")
+        results, meta = await tool(
+            queries=cleaned_queries,
             max_results=max_results,
             timeout_seconds=timeout_seconds,
             cache_enabled=bool(cache_config.get("cache_enabled", True)),
             cache_ttl_seconds=int(cache_config.get("cache_ttl_seconds", 600)),
         )
-        return results, failed
+        return results, meta
 
     def _get_current_datetime_context(self) -> str:
         datetime_tool = self.tool_registry.get_helper("datetime.now")
@@ -1233,6 +1456,7 @@ class ChatOrchestrator:
         fts_used: bool,
         tool_context_used: bool,
         tools_meta: ToolMetadata,
+        sources: list[SourceItem] | None = None,
     ) -> RetrievalInfo:
         context_sources: list[str] = []
 
@@ -1304,6 +1528,7 @@ class ChatOrchestrator:
             tools_used=list(tools_meta.used),
             retrieval_decision=retrieval_decision,
             retrieval_reason=retrieval_reason,
+            search_sources=self._compact_search_source_labels(list(sources or [])),
         )
 
     @staticmethod

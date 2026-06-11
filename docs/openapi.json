@@ -2017,6 +2017,21 @@
             "type": "string",
             "title": "Action",
             "default": "none"
+          },
+          "empty_before_fallback": {
+            "type": "boolean",
+            "title": "Empty Before Fallback",
+            "default": false
+          },
+          "retry_attempted": {
+            "type": "boolean",
+            "title": "Retry Attempted",
+            "default": false
+          },
+          "sanitized_empty": {
+            "type": "boolean",
+            "title": "Sanitized Empty",
+            "default": false
           }
         },
         "type": "object",
@@ -2369,6 +2384,13 @@
           },
           "retrieval": {
             "$ref": "#/components/schemas/RetrievalInfo"
+          },
+          "lifecycle_events": {
+            "items": {
+              "$ref": "#/components/schemas/LifecycleEventInfo"
+            },
+            "type": "array",
+            "title": "Lifecycle Events"
           },
           "auth": {
             "anyOf": [
@@ -2984,6 +3006,79 @@
           "text"
         ],
         "title": "InternalRecallTestRequest"
+      },
+      "LifecycleEventInfo": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "ok"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "LifecycleEventInfo"
       },
       "ModelCard": {
         "properties": {
@@ -3629,6 +3724,13 @@
               }
             ],
             "title": "Retrieval Reason"
+          },
+          "search_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Search Sources"
           }
         },
         "type": "object",
@@ -3652,10 +3754,28 @@
             ],
             "title": "Query"
           },
+          "queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Queries"
+          },
           "results_count": {
             "type": "integer",
             "title": "Results Count",
             "default": 0
+          },
+          "filtered_result_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filtered Result Count"
           },
           "failed": {
             "type": "boolean",
@@ -3666,6 +3786,66 @@
             "type": "boolean",
             "title": "Used",
             "default": false
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "cache_hit": {
+            "type": "boolean",
+            "title": "Cache Hit",
+            "default": false
+          },
+          "context_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Chars"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
           }
         },
         "type": "object",
@@ -3840,6 +4020,28 @@
               }
             ],
             "title": "Error"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "result_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Chars"
           }
         },
         "type": "object",

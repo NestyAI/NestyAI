@@ -64,7 +64,7 @@ async def execute_wikipedia_lookup(message: str, context: dict[str, Any] | None 
         return ToolResult(
             name="wikipedia_lookup",
             success=False,
-            content="Wikipedia lookup failed.",
+            content="No Wikipedia summary was found for that query. Try a more specific title or entity.",
             error="lookup_failed",
             confidence="low",
             latency_ms=int((time.perf_counter() - started) * 1000),

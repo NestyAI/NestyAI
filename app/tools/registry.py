@@ -13,7 +13,7 @@ from app.tools.exchange_rate import execute_exchange_rate
 from app.tools.fetch_url import fetch_url_text
 from app.tools.package_version import execute_package_version_lookup
 from app.tools.weather import execute_weather_lookup
-from app.tools.web_search import web_search_with_meta
+from app.tools.web_search import web_search_multi_with_meta, web_search_with_meta
 from app.tools.wikipedia import execute_wikipedia_lookup
 from app.utils.cache_keys import make_tool_cache_key
 from app.utils.ttl_cache import TTLCache
@@ -149,6 +149,15 @@ class ToolRegistry:
             spec.cache_ttl_seconds = max(0, ttl)
 
 
+def list_tool_trigger_keywords(registry: ToolRegistry | None = None) -> dict[str, list[str]]:
+    source = registry or tool_registry
+    keywords: dict[str, list[str]] = {}
+    for spec in source.list_tools(enabled_only=True):
+        if spec.trigger_keywords:
+            keywords[spec.name] = list(spec.trigger_keywords)
+    return keywords
+
+
 tool_registry = ToolRegistry()
 
 tool_registry.register_tool(
@@ -220,4 +229,5 @@ tool_registry.register_tool(
 # Internal helpers used by orchestrator search/fetch utilities.
 tool_registry.register_helper("datetime.now", get_current_datetime)
 tool_registry.register_helper("web.search", web_search_with_meta)
+tool_registry.register_helper("web.search.multi", web_search_multi_with_meta)
 tool_registry.register_helper("web.fetch_url_text", fetch_url_text)

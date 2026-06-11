@@ -93,8 +93,9 @@ async def execute_exchange_rate(message: str, context: dict[str, Any] | None = N
         return ToolResult(
             name="exchange_rate",
             success=False,
-            content="Exchange rate lookup failed.",
+            content="Exchange rate lookup is temporarily unavailable.",
             error="lookup_failed",
+            data={"base": base, "target": target, "amount": amount, "provider": "frankfurter"},
             confidence="low",
             latency_ms=int((time.perf_counter() - started) * 1000),
         )

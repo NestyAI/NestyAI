@@ -7,6 +7,7 @@ import httpx
 from app.core.errors import MissingAPIKeyError, ProviderError, StreamingNotSupportedError
 from app.core.http_client import get_shared_async_client
 from app.providers.base import BaseProvider
+from app.providers.content_extract import extract_choice_message_content
 from app.schemas.chat import ChatMessage
 from app.schemas.provider import ProviderChatResult, ProviderStreamChunk, ProviderUsage
 
@@ -95,9 +96,7 @@ class NvidiaProvider(BaseProvider):
             ) from exc
         choices = data.get("choices") or []
         first_choice = choices[0] if choices else {}
-        content = first_choice.get("message", {}).get("content", "")
-        if not isinstance(content, str):
-            content = str(content)
+        content = extract_choice_message_content(first_choice if isinstance(first_choice, dict) else {})
         usage_raw = data.get("usage", {})
         usage = ProviderUsage(
             prompt_tokens=int(usage_raw.get("prompt_tokens", 0) or 0),

@@ -141,6 +141,9 @@ class AnswerQualityInfo(BaseModel):
     checked: bool = False
     flags: list[str] = Field(default_factory=list)
     action: str = "none"
+    empty_before_fallback: bool = False
+    retry_attempted: bool = False
+    sanitized_empty: bool = False
 
 
 class PlannerInfo(BaseModel):
@@ -171,6 +174,17 @@ class RetrievalInfo(BaseModel):
     tools_used: list[str] = Field(default_factory=list)
     retrieval_decision: str = "none"
     retrieval_reason: str | None = None
+    search_sources: list[str] = Field(default_factory=list)
+
+
+class LifecycleEventInfo(BaseModel):
+    type: str
+    status: str = "ok"
+    error_code: str | None = None
+    latency_ms: int | None = None
+    count: int | None = None
+    provider: str | None = None
+    tool: str | None = None
 
 
 class ChatCompletionResponse(BaseModel):
@@ -191,6 +205,7 @@ class ChatCompletionResponse(BaseModel):
     answer_quality: AnswerQualityInfo = Field(default_factory=AnswerQualityInfo)
     planner: PlannerInfo = Field(default_factory=PlannerInfo)
     retrieval: RetrievalInfo = Field(default_factory=RetrievalInfo)
+    lifecycle_events: list[LifecycleEventInfo] = Field(default_factory=list)
     auth: AuthDebugInfo | None = None
     conversation: ConversationInfo | None = None
     model_alias: str | None = None

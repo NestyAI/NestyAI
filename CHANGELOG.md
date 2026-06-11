@@ -7,6 +7,26 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.4.0] - 2026-06-11
+
+### Added
+- Added tolerant OpenAI-compatible provider content extraction for string and multipart `message.content` payloads.
+- Added one safe empty-answer retry when retrieval, search, tools, or Pro synthesis context was used but the first final output was empty.
+- Added dependency-free search query planner (1–3 focused queries) with improved dedupe, ranking, and safe search metadata.
+- Added compact internal `lifecycle_events` metadata for search, tools, provider selection, answer quality, and chat completion (no outbound webhooks).
+
+### Changed
+- Improved generic tool planner reasons (`matched_<tool>`), registry trigger keyword exposure, and safer tool execution metadata (`error_code`, `result_chars`).
+- Improved search/tool coordination so deterministic tool intents can skip redundant web search unless `search=on`.
+- Extended safe metadata for search (`queries`, `provider`, `latency_ms`, `filtered_result_count`, `cache_hit`, `context_chars`) and answer quality (`empty_before_fallback`, `retry_attempted`).
+
+### Fixed
+- Fixed repeated `empty_answer` fallback when providers returned valid multipart content that was previously coerced to empty text.
+- Preserved surrounding user-facing prose when removing internal tool markup blocks.
+
+### Security
+- Lifecycle events and expanded metadata remain sanitized: no prompts, secrets, stack traces, raw provider payloads, chain-of-thought, or internal tool markup.
+
 ## [1.3.1] - Unreleased
 
 ### Added

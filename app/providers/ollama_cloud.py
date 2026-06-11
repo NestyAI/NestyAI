@@ -9,6 +9,7 @@ import httpx
 from app.core.errors import MissingAPIKeyError, ProviderError
 from app.core.http_client import get_shared_async_client
 from app.providers.base import BaseProvider
+from app.providers.content_extract import extract_text_content
 from app.schemas.chat import ChatMessage
 from app.schemas.provider import ProviderChatResult, ProviderStreamChunk, ProviderUsage
 
@@ -71,11 +72,9 @@ class OllamaCloudProvider(BaseProvider):
         data = self._parse_json(response)
 
         message_obj = data.get("message") if isinstance(data.get("message"), dict) else {}
-        content = message_obj.get("content")
-        if content is None:
-            content = data.get("response", "")
-        if not isinstance(content, str):
-            content = str(content or "")
+        content = extract_text_content(message_obj.get("content"))
+        if not content.strip():
+            content = extract_text_content(data.get("response"))
         usage = self._usage_from_ollama(data)
         return ProviderChatResult(provider=self.provider_name, content=content, usage=usage)
 
@@ -123,9 +122,9 @@ class OllamaCloudProvider(BaseProvider):
                         continue
 
                     message_obj = data.get("message") if isinstance(data.get("message"), dict) else {}
-                    delta = message_obj.get("content")
-                    if delta is not None and str(delta):
-                        yield ProviderStreamChunk(delta=str(delta))
+                    delta = extract_text_content(message_obj.get("content"))
+                    if delta:
+                        yield ProviderStreamChunk(delta=delta)
 
                     if bool(data.get("done")):
                         usage = self._usage_from_ollama(data)

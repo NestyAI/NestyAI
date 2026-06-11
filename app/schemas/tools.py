@@ -16,14 +16,25 @@ class FetchResult(BaseModel):
     title: str | None = None
     text: str = ""
     error: str | None = None
+    status_code: int | None = None
+    content_chars: int | None = None
+    blocked_reason: str | None = None
 
 
 class SearchToolMetadata(BaseModel):
     enabled: bool = False
     query: str | None = None
+    queries: list[str] = Field(default_factory=list)
     results_count: int = 0
+    filtered_result_count: int | None = None
     failed: bool = False
     used: bool = False
+    provider: str | None = None
+    latency_ms: int | None = None
+    error_code: str | None = None
+    cache_hit: bool = False
+    context_chars: int | None = None
+    decision_reason: str | None = None
 
 
 class ToolMetadata(BaseModel):
@@ -65,3 +76,5 @@ class ToolExecutionMetadata(BaseModel):
     cache_hit: bool = False
     confidence: str | None = None
     error: str | None = None
+    error_code: str | None = None
+    result_chars: int | None = None

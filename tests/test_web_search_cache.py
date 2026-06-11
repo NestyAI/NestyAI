@@ -16,7 +16,7 @@ async def test_web_search_uses_cache_on_second_call(monkeypatch) -> None:
             {
                 "title": "A",
                 "href": "https://example.com/a",
-                "body": "Snippet A",
+                "body": "Snippet A with enough useful detail for ranking.",
                 "source": "example",
             }
         ]
