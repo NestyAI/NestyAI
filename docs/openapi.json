@@ -1995,6 +1995,589 @@
           }
         }
       }
+    },
+    "/internal/console/runtime/providers": {
+      "get": {
+        "tags": [
+          "internal-console-runtime-providers"
+        ],
+        "summary": "List Runtime Providers Endpoint",
+        "operationId": "list_runtime_providers_endpoint_internal_console_runtime_providers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response List Runtime Providers Endpoint Internal Console Runtime Providers Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/providers/openai-compatible": {
+      "post": {
+        "tags": [
+          "internal-console-runtime-providers"
+        ],
+        "summary": "Create Openai Compatible Provider",
+        "operationId": "create_openai_compatible_provider_internal_console_runtime_providers_openai_compatible_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeOpenAIProviderCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Create Openai Compatible Provider Internal Console Runtime Providers Openai Compatible Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/providers/{provider_id}": {
+      "get": {
+        "tags": [
+          "internal-console-runtime-providers"
+        ],
+        "summary": "Get Runtime Provider Endpoint",
+        "operationId": "get_runtime_provider_endpoint_internal_console_runtime_providers__provider_id__get",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Runtime Provider Endpoint Internal Console Runtime Providers  Provider Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "internal-console-runtime-providers"
+        ],
+        "summary": "Patch Runtime Provider Endpoint",
+        "operationId": "patch_runtime_provider_endpoint_internal_console_runtime_providers__provider_id__patch",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeOpenAIProviderUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Patch Runtime Provider Endpoint Internal Console Runtime Providers  Provider Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "internal-console-runtime-providers"
+        ],
+        "summary": "Delete Runtime Provider Endpoint",
+        "operationId": "delete_runtime_provider_endpoint_internal_console_runtime_providers__provider_id__delete",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Delete Runtime Provider Endpoint Internal Console Runtime Providers  Provider Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/providers/{provider_id}/test": {
+      "post": {
+        "tags": [
+          "internal-console-runtime-providers"
+        ],
+        "summary": "Test Runtime Provider Endpoint",
+        "operationId": "test_runtime_provider_endpoint_internal_console_runtime_providers__provider_id__test_post",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeProviderTestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Test Runtime Provider Endpoint Internal Console Runtime Providers  Provider Id  Test Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/providers/{provider_id}/enable": {
+      "post": {
+        "tags": [
+          "internal-console-runtime-providers"
+        ],
+        "summary": "Enable Provider Endpoint",
+        "operationId": "enable_provider_endpoint_internal_console_runtime_providers__provider_id__enable_post",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Enable Provider Endpoint Internal Console Runtime Providers  Provider Id  Enable Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/providers/{provider_id}/disable": {
+      "post": {
+        "tags": [
+          "internal-console-runtime-providers"
+        ],
+        "summary": "Disable Provider Endpoint",
+        "operationId": "disable_provider_endpoint_internal_console_runtime_providers__provider_id__disable_post",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Disable Provider Endpoint Internal Console Runtime Providers  Provider Id  Disable Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/status": {
+      "get": {
+        "tags": [
+          "internal-console-runtime"
+        ],
+        "summary": "Runtime Status",
+        "operationId": "runtime_status_internal_console_runtime_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Runtime Status Internal Console Runtime Status Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/validate": {
+      "post": {
+        "tags": [
+          "internal-console-runtime"
+        ],
+        "summary": "Runtime Validate",
+        "operationId": "runtime_validate_internal_console_runtime_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Runtime Validate Internal Console Runtime Validate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/model-configs/{model_id}": {
+      "post": {
+        "tags": [
+          "internal-console-runtime"
+        ],
+        "summary": "Runtime Update Model Config",
+        "operationId": "runtime_update_model_config_internal_console_runtime_model_configs__model_id__post",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeModelConfigUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Runtime Update Model Config Internal Console Runtime Model Configs  Model Id  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/model-configs/{model_id}/reset": {
+      "post": {
+        "tags": [
+          "internal-console-runtime"
+        ],
+        "summary": "Runtime Reset Model Config",
+        "operationId": "runtime_reset_model_config_internal_console_runtime_model_configs__model_id__reset_post",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "changed_by_label",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "internal-console",
+              "title": "Changed By Label"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Runtime Reset Model Config Internal Console Runtime Model Configs  Model Id  Reset Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/provider-chain/{model_id}": {
+      "post": {
+        "tags": [
+          "internal-console-runtime"
+        ],
+        "summary": "Runtime Update Provider Chain",
+        "operationId": "runtime_update_provider_chain_internal_console_runtime_provider_chain__model_id__post",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeProviderChainUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Runtime Update Provider Chain Internal Console Runtime Provider Chain  Model Id  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/reload": {
+      "post": {
+        "tags": [
+          "internal-console-runtime"
+        ],
+        "summary": "Runtime Reload",
+        "operationId": "runtime_reload_internal_console_runtime_reload_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Runtime Reload Internal Console Runtime Reload Post"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3761,6 +4344,416 @@
         },
         "type": "object",
         "title": "RetrievalInfo"
+      },
+      "RuntimeModelConfigUpdateRequest": {
+        "properties": {
+          "override": {
+            "type": "object",
+            "title": "Override"
+          },
+          "changed_by_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed By Label",
+            "default": "internal-console"
+          }
+        },
+        "type": "object",
+        "required": [
+          "override"
+        ],
+        "title": "RuntimeModelConfigUpdateRequest"
+      },
+      "RuntimeOpenAIProviderCreateRequest": {
+        "properties": {
+          "provider_id": {
+            "type": "string",
+            "maxLength": 48,
+            "minLength": 3,
+            "title": "Provider Id"
+          },
+          "display_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Display Name"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "base_url": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "Base Url"
+          },
+          "chat_completions_path": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Chat Completions Path",
+            "default": "/v1/chat/completions"
+          },
+          "models_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Models Path"
+          },
+          "api_key_mode": {
+            "type": "string",
+            "title": "Api Key Mode",
+            "default": "none"
+          },
+          "api_key_env_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key Env Name"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "default_headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Default Headers"
+          },
+          "default_timeout_seconds": {
+            "type": "number",
+            "maximum": 600.0,
+            "minimum": 1.0,
+            "title": "Default Timeout Seconds",
+            "default": 30.0
+          },
+          "supports_streaming": {
+            "type": "boolean",
+            "title": "Supports Streaming",
+            "default": true
+          },
+          "supports_json_mode": {
+            "type": "boolean",
+            "title": "Supports Json Mode",
+            "default": false
+          },
+          "supports_tools": {
+            "type": "boolean",
+            "title": "Supports Tools",
+            "default": false
+          },
+          "supports_reasoning_effort": {
+            "type": "boolean",
+            "title": "Supports Reasoning Effort",
+            "default": false
+          },
+          "health_check_model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Check Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider_id",
+          "display_name",
+          "base_url"
+        ],
+        "title": "RuntimeOpenAIProviderCreateRequest"
+      },
+      "RuntimeOpenAIProviderUpdateRequest": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "chat_completions_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Completions Path"
+          },
+          "models_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Models Path"
+          },
+          "api_key_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key Mode"
+          },
+          "api_key_env_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key Env Name"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "default_headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Headers"
+          },
+          "default_timeout_seconds": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 600.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Timeout Seconds"
+          },
+          "supports_streaming": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Streaming"
+          },
+          "supports_json_mode": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Json Mode"
+          },
+          "supports_tools": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Tools"
+          },
+          "supports_reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Reasoning Effort"
+          },
+          "health_check_model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Check Model"
+          }
+        },
+        "type": "object",
+        "title": "RuntimeOpenAIProviderUpdateRequest"
+      },
+      "RuntimeProviderChainUpdateRequest": {
+        "properties": {
+          "provider_chain": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Provider Chain"
+          },
+          "changed_by_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed By Label",
+            "default": "internal-console"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider_chain"
+        ],
+        "title": "RuntimeProviderChainUpdateRequest"
+      },
+      "RuntimeProviderTestRequest": {
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Message",
+            "default": "Reply with exactly: OK"
+          }
+        },
+        "type": "object",
+        "title": "RuntimeProviderTestRequest"
+      },
+      "RuntimeValidateRequest": {
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Model Id"
+          },
+          "override": {
+            "type": "object",
+            "title": "Override"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model_id",
+          "override"
+        ],
+        "title": "RuntimeValidateRequest"
       },
       "SearchToolMetadata": {
         "properties": {

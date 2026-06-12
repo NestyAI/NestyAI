@@ -176,6 +176,8 @@ def init_db(db_path: str) -> None:
         _ensure_conversations_summary_columns(conn)
         _ensure_conversation_messages_memory_columns(conn)
         _ensure_provider_health_checks_table(conn)
+        _ensure_runtime_gateway_tables(conn)
+        _ensure_runtime_provider_definitions_table(conn)
         conn.commit()
     _try_init_conversation_fts(db_path)
 
@@ -244,6 +246,62 @@ def _ensure_provider_health_checks_table(conn: sqlite3.Connection) -> None:
         "ON provider_health_checks(status, checked_at)"
     )
 
+
+
+
+def _ensure_runtime_provider_definitions_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS runtime_provider_definitions (
+            provider_id TEXT PRIMARY KEY,
+            provider_type TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            base_url TEXT NOT NULL,
+            chat_completions_path TEXT NOT NULL,
+            models_path TEXT,
+            api_key_mode TEXT NOT NULL,
+            api_key_env_name TEXT,
+            api_key_secret_ref TEXT,
+            default_headers_json TEXT NOT NULL,
+            capabilities_json TEXT NOT NULL,
+            default_timeout_seconds REAL NOT NULL,
+            health_check_model TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_runtime_provider_definitions_enabled "
+        "ON runtime_provider_definitions(enabled, provider_id)"
+    )
+
+def _ensure_runtime_gateway_tables(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS runtime_gateway_state (
+            id TEXT PRIMARY KEY,
+            state_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS runtime_config_audit_logs (
+            id TEXT PRIMARY KEY,
+            config_area TEXT NOT NULL,
+            action TEXT NOT NULL,
+            metadata_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_runtime_config_audit_created "
+        "ON runtime_config_audit_logs(created_at)"
+    )
 
 def get_connection(db_path: str) -> sqlite3.Connection:
     resolved = _resolve_db_path(db_path)

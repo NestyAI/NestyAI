@@ -14,10 +14,13 @@ from app.api.health import router as health_router
 from app.api.internal_api_keys import router as internal_api_keys_router
 from app.api.internal_diagnostics import router as internal_diagnostics_router
 from app.api.internal_embeddings import router as internal_embeddings_router
+from app.api.internal_console_runtime_providers import router as internal_console_runtime_providers_router
+from app.api.internal_console_runtime import router as internal_console_runtime_router
 from app.api.internal_model_configs import router as internal_model_configs_router
 from app.api.models import router as models_router
 from app.config import Settings
 from app.core.errors import APIError, build_error_response, validation_error_param
+from app.core.bootstrap.bootstrap_credentials import resolve_bootstrap_credentials
 from app.core.ephemeral_console_key import rotate_ephemeral_console_api_key_from_env
 from app.core.http_client import close_shared_async_client
 from app.deps import get_settings, set_runtime_settings
@@ -55,7 +58,8 @@ def validate_runtime_settings(settings: Settings) -> None:
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    app_settings = settings or get_settings()
+    base_settings = settings or get_settings()
+    app_settings = resolve_bootstrap_credentials(base_settings)
     set_runtime_settings(app_settings)
     validate_runtime_settings(app_settings)
 
@@ -118,6 +122,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(internal_embeddings_router)
     app.include_router(internal_diagnostics_router)
     app.include_router(internal_api_keys_router)
+    app.include_router(internal_console_runtime_providers_router)
+    app.include_router(internal_console_runtime_router)
 
     @app.exception_handler(APIError)
     async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:

@@ -13,6 +13,7 @@ cloudflare/*.pid
 
 # Local data / databases
 data/
+.nesty/
 *.db
 *.sqlite
 *.sqlite3

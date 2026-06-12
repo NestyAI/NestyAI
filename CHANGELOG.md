@@ -7,6 +7,43 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.5.1] - 2026-06-12
+
+### Added
+- Dynamic runtime registration of OpenAI-compatible chat providers via secure `/internal/console/runtime/providers/*` APIs.
+- SQLite-backed `runtime_provider_definitions` storage with file-backed secret mode under `.nesty/provider_secrets/`.
+- Runtime providers participate in provider routing/fallback when enabled and referenced in model `provider_chain` overrides.
+- Provider test endpoint with SSRF-safe URL validation and optional DNS resolution checks on test.
+
+### Changed
+- Built-in provider disable remains routing-only; runtime provider disable sets persistent `enabled=false`.
+- Provider chain validation accepts enabled runtime provider IDs when `NESTY_RUNTIME_OPENAI_PROVIDERS_ENABLED=true`.
+- Provider cache (`get_providers`) is cleared with router/orchestrator caches after runtime mutations.
+
+### Security
+- Localhost/private/metadata base URLs blocked by default; explicit dev flags required for self-host local endpoints.
+- API keys never returned in responses, audit logs, or lifecycle metadata.
+
+## [1.5.0] - 2026-06-12
+
+### Added
+- Provider capability registry with shared OpenAI-compatible adapter foundation and opt-in DeepSeek first-party provider.
+- Secure `/internal/console/runtime/*` POST APIs for external/custom consoles (validate, model config, provider chain, provider disable/enable, reload, status).
+- Internal Admin Token bootstrap modes: `env` (default), `file` (recommended for personal self-host), and dev-only `ephemeral`.
+- Optional Console Client auth layer for `/internal/console/*` routes (`NESTY_CONSOLE_CLIENT_AUTH_REQUIRED=false` by default).
+- Runtime routing-only provider disable state (reversible, SQLite-backed).
+- Secret redaction helpers for admin tokens, console secrets, API keys, and Bearer headers.
+
+### Changed
+- Groq and OpenRouter adapters refactored onto shared OpenAI-compatible provider with parity-preserving streaming behavior.
+- Internal admin token validation uses constant-time comparison.
+- Legacy `/internal/*` routes unchanged; Nesty Console continues to work with Internal Admin Token only.
+
+### Security
+- Bootstrap tokens/secrets are never returned from APIs and are not printed unless explicit print flags are set.
+- Runtime config responses include changed field names only, never secret values.
+- `.nesty/` bootstrap files are gitignored.
+
 ## [1.4.1] - 2026-06-11
 
 ### Added

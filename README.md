@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/FastAPI-Production%20Ready-009688" alt="FastAPI" />
   <img src="https://img.shields.io/badge/API-OpenAI%20Compatible-orange" alt="OpenAI Compatible" />
   <img src="https://img.shields.io/badge/streaming-SSE-ff9800" alt="SSE" />
-  <img src="https://img.shields.io/badge/version-1.4.1-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.5.1-blue" alt="Version" />
   <img src="https://img.shields.io/badge/tests-529%20passed-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License: Apache-2.0" />
 </p>
@@ -57,11 +57,10 @@ If you need a gateway that feels lean, but still behaves like a serious producti
 
 ## Current Release Snapshot
 
-- Version: `1.4.1` — AI Quality Reliability Patch
-- Public API: OpenAI-compatible provider surface at `/v1`
-- Quality: conservative weak-answer detection and one safe context-aware retry
-- Metadata: `retry_reason`, `context_available`, `context_signal_count` on `answer_quality`
-- Retry policy: keeps the better non-empty answer when retry is worse; no retry on safety refusals
+- Version: `1.5.1` — Dynamic OpenAI-Compatible Provider Runtime
+- Public API: OpenAI-compatible provider surface at `/v1` (unchanged)
+- Runtime providers: register OpenAI-compatible endpoints via internal console APIs
+- Built-in vs runtime: non-OpenAI-compatible providers still require built-in adapter code
 
 ---
 

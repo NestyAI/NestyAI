@@ -488,24 +488,52 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
 
 ## Internal Endpoints
 
-Internal endpoints are hidden administrative routes.
-*   **Usage constraint**: Intended for **Server-to-Server** direct use only (e.g. from a secure proxy or next-hop controller path inside future Nesty Console backend routes).
+Internal endpoints are hidden administrative routes for **personal self-host / operator tooling**.
+*   **Usage constraint**: Server-to-server only. Never expose admin tokens to browsers or mobile clients.
 *   **Configuration Requirement**: Requires `INTERNAL_ADMIN_ENABLED=true`.
-*   **Security Header**: Must supply `Authorization: Bearer NESTY_INTERNAL_ADMIN_TOKEN`.
+*   **Security Header**: `Authorization: Bearer <NESTY_INTERNAL_ADMIN_TOKEN>`.
+*   Public `nsk_*` API keys must **not** access internal routes.
 
-### 1. Model Configurations
-*   `GET /internal/model-configs`: List configurations
-*   `GET /internal/model-configs/{model_id}`: Detail config
-*   `POST /internal/model-configs`: Create config
-*   `PUT /internal/model-configs/{model_id}`: Update config
-*   `DELETE /internal/model-configs/{model_id}`: Delete config
-*   `POST /internal/model-configs/test-provider`: Validate external provider credentials
+### 1. Model Configurations (legacy, unchanged)
+*   `GET /internal/model-configs`: List effective configurations
+*   `GET /internal/model-configs/{model_id}`: Detail config (default, override, effective)
+*   `GET /internal/model-configs/audit`: Audit log
+*   `PATCH /internal/model-configs/{model_id}`: Apply runtime override
+*   `POST /internal/model-configs/{model_id}/reset`: Reset override to YAML defaults
+*   `POST /internal/model-configs/{model_id}/test`: Live provider-chain test
 
-### 2. Embeddings Diagnostics
+### 2. Console Runtime Config (v1.5.0, additive)
+Prefix: `/internal/console/runtime`
+
+Requires Internal Admin Token. When `NESTY_CONSOLE_CLIENT_AUTH_REQUIRED=true`, also requires:
+*   `X-Nesty-Console-ID: <console_id>`
+*   `X-Nesty-Console-Secret: <console_secret>`
+
+Endpoints:
+*   `GET /internal/console/runtime/status`: Safe runtime snapshot (capabilities, disabled providers, model summaries)
+*   `POST /internal/console/runtime/validate`: Dry-run validate override payload
+*   `POST /internal/console/runtime/model-configs/{model_id}`: Apply runtime override
+*   `POST /internal/console/runtime/model-configs/{model_id}/reset`: Reset override
+*   `POST /internal/console/runtime/provider-chain/{model_id}`: Update `provider_chain` only
+*   `GET /internal/console/runtime/providers`: List built-in + runtime provider capabilities
+*   `POST /internal/console/runtime/providers/openai-compatible`: Register a runtime OpenAI-compatible provider
+*   `GET /internal/console/runtime/providers/{provider_id}`: Provider detail (safe fields only)
+*   `PATCH /internal/console/runtime/providers/{provider_id}`: Update runtime provider config
+*   `DELETE /internal/console/runtime/providers/{provider_id}`: Delete runtime provider and secret file
+*   `POST /internal/console/runtime/providers/{provider_id}/test`: Test runtime provider connectivity
+*   `POST /internal/console/runtime/providers/{provider_id}/disable`: Built-in = routing-only disable; runtime = `enabled=false`
+*   `POST /internal/console/runtime/providers/{provider_id}/enable`: Built-in = re-enable routing; runtime = `enabled=true`
+*   `POST /internal/console/runtime/reload`: Clear runtime caches and reload effective config
+
+Responses include `ok`, `request_id`, `config_area`, `changed_fields`, and safe `validation_warnings` only. Secret values are never returned.
+
+See [RUNTIME_CONFIG.md](RUNTIME_CONFIG.md) for bootstrap modes and third-party console integration.
+
+### 3. Embeddings Diagnostics
 *   `POST /internal/embeddings/test`: Test embedder output
 *   `POST /internal/embeddings/recall-test`: Test semantic memory search retrieval results
 
-### 3. Diagnostics
+### 4. Diagnostics
 *   `GET /internal/diagnostics/provider-health`: List historical health records
 *   `GET /internal/diagnostics/provider-health/latest`: Get latest target states
 *   `DELETE /internal/diagnostics/provider-health`: Clear provider health history (supports optional filters)
@@ -513,7 +541,7 @@ Internal endpoints are hidden administrative routes.
 *   `POST /internal/diagnostics/provider-health/check`: Trigger test on alias
 *   `POST /internal/diagnostics/provider-model/check`: Trigger direct provider/model check
 
-### 4. API Keys Management
+### 5. API Keys Management
 *   `GET /internal/api-keys`: List all API keys (supports environment, revoked, limit, offset, q search filters).
 *   `POST /internal/api-keys`: Create an API key (returns the raw API key exactly once in the response).
 *   `GET /internal/api-keys/{api_key_id}`: Get detail of an API key (omits secrets/hash).

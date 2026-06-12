@@ -21,6 +21,8 @@ def _runtime_settings(db_path: str):
             "ollama_api_key": "",
             "ollama_base_url": "https://ollama.com",
             "ollama_request_timeout_seconds": 30.0,
+            "deepseek_api_key": "",
+            "nesty_runtime_openai_providers_enabled": False,
             "trusted_hosts": "testserver",
         },
     )()

@@ -322,6 +322,18 @@ builder.Services.AddHttpClient<INestyAiChatService, NestyAiChatService>();
 
 ---
 
+## Runtime OpenAI-compatible providers (Gateway v1.5.1+)
+
+Operators can register additional OpenAI-compatible upstreams at runtime via `/internal/console/runtime/providers/openai-compatible` (Internal Admin Token required). These providers:
+
+- Use the same OpenAI chat-completions request/response shape as built-in adapters.
+- Route through existing fallback when referenced in a model `provider_chain`.
+- Are **not** a generic plugin system — proprietary or non-OpenAI APIs still need built-in adapter code.
+
+Local/private provider URLs (LM Studio, Ollama on localhost, etc.) are **blocked by default**. Enabling `NESTY_RUNTIME_PROVIDER_ALLOW_PRIVATE_BASE_URL` is self-host/dev mode and can be dangerous if misconfigured. See [`RUNTIME_CONFIG.md`](RUNTIME_CONFIG.md).
+
+---
+
 ## Related documentation
 
 - [`API_CONTRACT.md`](API_CONTRACT.md) — full endpoint specification

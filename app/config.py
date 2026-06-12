@@ -73,6 +73,25 @@ class Settings(BaseModel):
     nesty_pro_orchestration_include_role_latency: bool = True
     internal_admin_enabled: bool = False
     nesty_internal_admin_token: str | None = None
+    nesty_internal_admin_token_mode: str = "env"
+    internal_admin_token_file: str = ".nesty/internal_admin_token"
+    nesty_print_bootstrap_admin_token: bool = False
+    internal_admin_token_source: str | None = None
+    internal_admin_token_file_resolved: str | None = None
+    nesty_console_client_auth_required: bool = False
+    nesty_console_client_id: str = "default-console"
+    nesty_console_client_secret: str | None = None
+    nesty_console_client_secret_mode: str = "env"
+    nesty_console_client_secret_file: str = ".nesty/console_client_secret"
+    nesty_print_bootstrap_console_secret: bool = False
+    console_client_secret_source: str | None = None
+    console_client_secret_file_resolved: str | None = None
+    deepseek_api_key: str | None = None
+    nesty_runtime_openai_providers_enabled: bool = True
+    nesty_runtime_provider_secret_mode: str = "file"
+    nesty_runtime_provider_secret_dir: str = ".nesty/provider_secrets"
+    nesty_runtime_provider_allow_http: bool = False
+    nesty_runtime_provider_allow_private_base_url: bool = False
     embeddings_enabled: bool = False
     embeddings_provider: str = "openrouter"
     embeddings_model: str = "nvidia/llama-nemotron-embed-vl-1b-v2:free"
@@ -185,6 +204,23 @@ class Settings(BaseModel):
             ),
             internal_admin_enabled=_to_bool(os.getenv("INTERNAL_ADMIN_ENABLED"), False),
             nesty_internal_admin_token=os.getenv("NESTY_INTERNAL_ADMIN_TOKEN"),
+            nesty_internal_admin_token_mode=os.getenv("NESTY_INTERNAL_ADMIN_TOKEN_MODE", "env"),
+            internal_admin_token_file=os.getenv("INTERNAL_ADMIN_TOKEN_FILE", ".nesty/internal_admin_token"),
+            nesty_print_bootstrap_admin_token=_to_bool(os.getenv("NESTY_PRINT_BOOTSTRAP_ADMIN_TOKEN"), False),
+            nesty_console_client_auth_required=_to_bool(os.getenv("NESTY_CONSOLE_CLIENT_AUTH_REQUIRED"), False),
+            nesty_console_client_id=os.getenv("NESTY_CONSOLE_CLIENT_ID", "default-console"),
+            nesty_console_client_secret=os.getenv("NESTY_CONSOLE_CLIENT_SECRET"),
+            nesty_console_client_secret_mode=os.getenv("NESTY_CONSOLE_CLIENT_SECRET_MODE", "env"),
+            nesty_console_client_secret_file=os.getenv("NESTY_CONSOLE_CLIENT_SECRET_FILE", ".nesty/console_client_secret"),
+            nesty_print_bootstrap_console_secret=_to_bool(os.getenv("NESTY_PRINT_BOOTSTRAP_CONSOLE_SECRET"), False),
+            deepseek_api_key=os.getenv("DEEPSEEK_API_KEY"),
+            nesty_runtime_openai_providers_enabled=_to_bool(os.getenv("NESTY_RUNTIME_OPENAI_PROVIDERS_ENABLED"), True),
+            nesty_runtime_provider_secret_mode=os.getenv("NESTY_RUNTIME_PROVIDER_SECRET_MODE", "file"),
+            nesty_runtime_provider_secret_dir=os.getenv("NESTY_RUNTIME_PROVIDER_SECRET_DIR", ".nesty/provider_secrets"),
+            nesty_runtime_provider_allow_http=_to_bool(os.getenv("NESTY_RUNTIME_PROVIDER_ALLOW_HTTP"), False),
+            nesty_runtime_provider_allow_private_base_url=_to_bool(
+                os.getenv("NESTY_RUNTIME_PROVIDER_ALLOW_PRIVATE_BASE_URL"), False
+            ),
             embeddings_enabled=_to_bool(os.getenv("EMBEDDINGS_ENABLED"), False),
             embeddings_provider=os.getenv("EMBEDDINGS_PROVIDER", "openrouter"),
             embeddings_model=os.getenv("EMBEDDINGS_MODEL", "nvidia/llama-nemotron-embed-vl-1b-v2:free"),

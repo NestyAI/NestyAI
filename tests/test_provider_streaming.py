@@ -41,7 +41,7 @@ async def test_groq_provider_stream_normalizes_chunks(monkeypatch) -> None:
         "data: [DONE]",
     ]
     monkeypatch.setattr(
-        "app.providers.groq.get_shared_async_client",
+        "app.providers.openai_compatible.get_shared_async_client",
         lambda timeout_seconds: _FakeAsyncClient(status_code=200, lines=lines),
     )
 
@@ -73,7 +73,7 @@ async def test_openrouter_provider_stream_normalizes_chunks(monkeypatch) -> None
         "data: [DONE]",
     ]
     monkeypatch.setattr(
-        "app.providers.openrouter.get_shared_async_client",
+        "app.providers.openai_compatible.get_shared_async_client",
         lambda timeout_seconds: _FakeAsyncClient(status_code=200, lines=lines),
     )
 

@@ -4,6 +4,7 @@ from fastapi import Request
 
 import app.deps as deps
 from app.core.errors import APIError
+from app.security.secret_compare import secrets_equal
 
 
 def get_settings():
@@ -30,7 +31,7 @@ def require_internal_admin(request: Request) -> None:
             status_code=401,
         )
     provided_token = parts[1].strip()
-    if not provided_token or provided_token != token:
+    if not provided_token or not secrets_equal(provided_token, token):
         raise APIError(
             code="internal_admin_unauthorized",
             message="Unauthorized internal admin request.",

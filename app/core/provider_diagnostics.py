@@ -11,10 +11,7 @@ from app.config import Settings
 from app.core.errors import APIError, MissingAPIKeyError, ProviderError
 from app.core.model_config_loader import get_effective_model_config, list_effective_model_configs
 from app.providers.base import BaseProvider
-from app.providers.groq import GroqProvider
-from app.providers.nvidia import NvidiaProvider
-from app.providers.ollama_cloud import OllamaCloudProvider
-from app.providers.openrouter import OpenRouterProvider
+from app.providers.registry import build_all_chat_providers
 from app.schemas.chat import ChatMessage
 from app.storage.provider_health import record_provider_health_check
 
@@ -99,20 +96,7 @@ def extract_configured_provider_targets(
 
 
 def _build_providers(settings: Settings, timeout_seconds: float) -> dict[str, BaseProvider]:
-    return {
-        "groq": GroqProvider(api_key=settings.groq_api_key, timeout_seconds=timeout_seconds),
-        "openrouter": OpenRouterProvider(api_key=settings.openrouter_api_key, timeout_seconds=timeout_seconds),
-        "nvidia": NvidiaProvider(
-            api_key=settings.nvidia_api_key,
-            timeout_seconds=timeout_seconds,
-            base_url=settings.nvidia_base_url,
-        ),
-        "ollama_cloud": OllamaCloudProvider(
-            api_key=settings.ollama_api_key,
-            timeout_seconds=timeout_seconds,
-            base_url=settings.ollama_base_url,
-        ),
-    }
+    return build_all_chat_providers(settings, timeout_seconds=timeout_seconds)
 
 
 def _sanitize_output_preview(text: str, max_chars: int) -> str:

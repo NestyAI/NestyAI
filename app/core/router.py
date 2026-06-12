@@ -7,6 +7,7 @@ from typing import Any
 from app.config import ModelProfile, ModelsConfig
 from app.core.model_config_loader import get_effective_model_config
 from app.core.provider_health_service import should_skip_provider_target
+from app.core.runtime_gateway_state import is_provider_runtime_disabled
 from app.core.errors import APIError, MissingAPIKeyError, ProviderError, StreamingNotSupportedError
 from app.providers.base import BaseProvider
 from app.schemas.chat import ChatMessage
@@ -83,6 +84,8 @@ class ProviderRouter:
             model_alias=model_alias,
             role=role,
         )
+        runtime_meta, eligible_targets = self._apply_runtime_provider_disable(eligible_targets)
+        provider_health_meta = self._merge_provider_routing_meta(provider_health_meta, runtime_meta)
         attempted_providers: list[str] = []
         provider_errors: list[dict[str, Any]] = []
         last_error_code = "provider_unavailable"
@@ -249,6 +252,8 @@ class ProviderRouter:
             model_alias=model_alias,
             role="main",
         )
+        runtime_meta, eligible_targets = self._apply_runtime_provider_disable(eligible_targets)
+        provider_health_meta = self._merge_provider_routing_meta(provider_health_meta, runtime_meta)
 
         for provider_name, provider_model in eligible_targets:
             attempted_providers.append(provider_name)
@@ -534,6 +539,39 @@ class ProviderRouter:
             "all_targets_skipped": all_targets_skipped,
         }
         return provider_health_meta, eligible_targets
+
+    @staticmethod
+    def _merge_provider_routing_meta(
+        base_meta: dict[str, Any] | None,
+        extra_meta: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if not base_meta and not extra_meta:
+            return None
+        merged: dict[str, Any] = dict(base_meta or {})
+        if extra_meta:
+            merged.update(extra_meta)
+        return merged
+
+    def _apply_runtime_provider_disable(
+        self,
+        targets: list[tuple[str, str]],
+    ) -> tuple[dict[str, Any] | None, list[tuple[str, str]]]:
+        disabled_targets: list[dict[str, str]] = []
+        eligible_targets: list[tuple[str, str]] = []
+        for provider_name, provider_model in targets:
+            if is_provider_runtime_disabled(provider_name):
+                disabled_targets.append(
+                    {
+                        "provider": provider_name,
+                        "model": provider_model,
+                        "reason": "runtime_disabled",
+                    }
+                )
+                continue
+            eligible_targets.append((provider_name, provider_model))
+        if not disabled_targets:
+            return None, eligible_targets
+        return {"runtime_disabled_targets": disabled_targets}, eligible_targets
 
     @staticmethod
     def _classify_provider_error(exc: ProviderError, is_stream: bool = False) -> str:

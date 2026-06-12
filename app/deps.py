@@ -10,10 +10,7 @@ from app.guards.context_guard import ContextGuard
 from app.guards.input_guard import InputGuard
 from app.guards.output_guard import OutputGuard
 from app.providers.base import BaseProvider
-from app.providers.groq import GroqProvider
-from app.providers.nvidia import NvidiaProvider
-from app.providers.ollama_cloud import OllamaCloudProvider
-from app.providers.openrouter import OpenRouterProvider
+from app.providers.registry import build_all_chat_providers
 from app.tools.registry import tool_registry
 from app.utils.logging import get_logger
 
@@ -53,21 +50,7 @@ def get_guard_rules() -> dict:
 @lru_cache(maxsize=1)
 def get_providers() -> dict[str, BaseProvider]:
     settings = get_settings()
-    timeout = settings.request_timeout_seconds
-    return {
-        "groq": GroqProvider(api_key=settings.groq_api_key, timeout_seconds=timeout),
-        "openrouter": OpenRouterProvider(api_key=settings.openrouter_api_key, timeout_seconds=timeout),
-        "nvidia": NvidiaProvider(
-            api_key=settings.nvidia_api_key,
-            timeout_seconds=timeout,
-            base_url=settings.nvidia_base_url,
-        ),
-        "ollama_cloud": OllamaCloudProvider(
-            api_key=settings.ollama_api_key,
-            timeout_seconds=float(settings.ollama_request_timeout_seconds or timeout),
-            base_url=settings.ollama_base_url,
-        ),
-    }
+    return build_all_chat_providers(settings)
 
 
 @lru_cache(maxsize=1)
@@ -111,5 +94,6 @@ def clear_runtime_model_config_caches() -> None:
     diagnostics and health checks observe the fresh effective config immediately.
     """
 
+    get_providers.cache_clear()
     get_provider_router.cache_clear()
     get_orchestrator.cache_clear()

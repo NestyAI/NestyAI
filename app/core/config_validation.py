@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from app.config import Settings, load_models_config
+from app.core.runtime_providers.validation import get_supported_chat_provider_ids
+from app.providers.constants import BUILTIN_PROVIDER_IDS
 from app.storage.db import init_db
 
 
@@ -132,7 +134,7 @@ def validate_model_chains(project_root: Path | None = None) -> list[dict[str, An
     try:
         models_config = load_models_config(models_path)
         embedding_keywords = {"embed", "similarity", "vector", "clip"}
-        supported_providers = {"groq", "openrouter", "nvidia", "ollama_cloud"}
+        supported_providers = set(BUILTIN_PROVIDER_IDS)
 
         for model_id, profile in models_config.models.items():
             # Check main provider chain
@@ -222,17 +224,30 @@ def validate_env_safety(settings: Settings | None = None) -> list[dict[str, Any]
     # INTERNAL_ADMIN_ENABLED check
     if s.internal_admin_enabled:
         token = s.nesty_internal_admin_token
-        if not token or len(token.strip()) < 8:
-            results.append({
-                "name": "internal_admin_token",
-                "status": "WARN",
-                "message": "INTERNAL_ADMIN_ENABLED=true, but NESTY_INTERNAL_ADMIN_TOKEN is missing or too short (must be at least 8 characters)."
-            })
-        else:
+        mode = str(getattr(s, "nesty_internal_admin_token_mode", "env") or "env").strip().lower()
+        if token and len(token.strip()) >= 8:
             results.append({
                 "name": "internal_admin_token",
                 "status": "PASS",
                 "message": "NESTY_INTERNAL_ADMIN_TOKEN is configured securely"
+            })
+        elif mode == "file":
+            results.append({
+                "name": "internal_admin_token",
+                "status": "PASS",
+                "message": "Internal admin token will be loaded or generated from file at startup (NESTY_INTERNAL_ADMIN_TOKEN_MODE=file)."
+            })
+        elif mode == "ephemeral":
+            results.append({
+                "name": "internal_admin_token",
+                "status": "WARN",
+                "message": "Ephemeral internal admin token mode is enabled. Token changes on restart; use env or file mode for personal self-host production."
+            })
+        else:
+            results.append({
+                "name": "internal_admin_token",
+                "status": "WARN",
+                "message": "INTERNAL_ADMIN_ENABLED=true, but NESTY_INTERNAL_ADMIN_TOKEN is missing or too short (must be at least 8 characters)."
             })
     else:
         results.append({

@@ -7,7 +7,7 @@ from app.storage.model_configs import get_model_override, list_model_overrides
 from app.utils.logging import get_logger, log_safe
 
 
-SUPPORTED_PROVIDERS = {"groq", "openrouter", "nvidia", "ollama_cloud"}
+from app.core.runtime_providers.validation import get_supported_chat_provider_ids
 ALLOWED_OVERRIDE_FIELDS = {
     "display_name",
     "behavior_profile",
@@ -165,7 +165,7 @@ def _validate_provider_chain(provider_chain: Any) -> tuple[bool, str | None]:
             return False, "model_config_invalid: provider_chain entries must be objects"
         provider = str(item.get("provider") or "").strip()
         model = str(item.get("model") or "").strip()
-        if provider not in SUPPORTED_PROVIDERS:
+        if provider not in get_supported_chat_provider_ids():
             return False, f"model_config_invalid: unsupported provider '{provider}'"
         if not model:
             return False, "model_config_invalid: provider_chain model must be non-empty"
