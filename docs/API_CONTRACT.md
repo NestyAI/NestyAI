@@ -207,7 +207,11 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
         "action": "none",
         "empty_before_fallback": false,
         "retry_attempted": false,
-        "sanitized_empty": false
+        "sanitized_empty": false,
+        "retry_reason": null,
+        "weak_answer_before_retry": false,
+        "context_available": false,
+        "context_signal_count": 0
       },
       "planner": {
         "search_decision": "no_search_needed",

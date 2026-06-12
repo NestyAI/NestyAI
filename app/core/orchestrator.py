@@ -10,7 +10,12 @@ from urllib.parse import urlparse
 from app.config import ModelProfile, ModelsConfig, Settings
 from app.core.internal_tool_markup import sanitize_internal_tool_markup
 from app.core.errors import APIError
-from app.core.answer_quality import evaluate_answer_quality
+from app.core.answer_quality import (
+    answer_substance_score,
+    assess_quality_retry,
+    compute_context_signals,
+    evaluate_answer_quality,
+)
 from app.core.lifecycle_events import LifecycleEventCollector
 from app.core.model_config_loader import get_effective_model_config
 from app.core.model_behavior import apply_behavior_defaults, build_behavior_system_instruction
@@ -19,7 +24,9 @@ from app.core.multi_model_orchestrator import NestyProMultiModelOrchestrator, sh
 from app.core.prompt_builder import (
     append_clarification_instruction,
     append_behavior_instruction,
+    append_quality_retry_instruction,
     append_retrieval_context,
+    append_synthesis_when_context_present,
     ensure_system_message,
 )
 from app.core.router import ProviderRouter
@@ -303,60 +310,100 @@ class ChatOrchestrator:
                 )
 
             output_guard_info = GuardInfo()
-            response_text, output_safety, output_guard_info = self._finalize_response_text(
+            response_text, output_safety, output_guard_info, sanitized_empty = self._finalize_response_text(
                 response_text,
                 orchestration_markup_removed=orchestration_markup_removed,
             )
 
-            empty_retry_attempted = False
+            quality_retry_attempted = False
+            quality_retry_reason: str | None = None
+            weak_answer_before_retry = False
             empty_before_quality_check = not str(response_text or "").strip()
-            if (
-                not str(response_text or "").strip()
-                and self._should_retry_empty_answer(
-                    retrieval=retrieval,
-                    tools_meta=tools_meta,
-                    planner=planner,
-                    orchestration=orchestration,
-                )
-            ):
-                empty_retry_attempted = True
+            first_response_text = response_text
+            first_output_safety = output_safety
+            first_output_guard_info = output_guard_info
+            first_sanitized_empty = sanitized_empty
+
+            retry_assessment = assess_quality_retry(
+                response_text,
+                retrieval=retrieval,
+                tools=tools_meta,
+                sources=sources,
+                planner=planner,
+                orchestration=orchestration,
+                output_safety=output_safety,
+                output_guard_info=output_guard_info,
+                sanitized_empty=sanitized_empty,
+            )
+            if retry_assessment.should_retry:
+                quality_retry_attempted = True
+                quality_retry_reason = retry_assessment.retry_reason
+                weak_answer_before_retry = retry_assessment.weak_answer_before_retry
+                retry_messages = append_quality_retry_instruction(list(messages))
                 route_result = await self.router.route_chat(
                     request_id=request_id,
                     model_alias=request.model,
-                    messages=messages,
+                    messages=retry_messages,
                     temperature=request.temperature,
                     max_tokens=request.max_tokens,
                 )
-                response_text = route_result.provider_result.content
-                provider_used = route_result.provider_used
-                raw_provider_health = getattr(route_result, "provider_health", None)
-                if isinstance(raw_provider_health, dict):
-                    provider_health_info = ProviderHealthInfo.model_validate(raw_provider_health)
-                usage = Usage(
-                    prompt_tokens=usage.prompt_tokens + route_result.provider_result.usage.prompt_tokens,
-                    completion_tokens=usage.completion_tokens + route_result.provider_result.usage.completion_tokens,
-                    total_tokens=usage.total_tokens + route_result.provider_result.usage.total_tokens,
-                )
-                response_text, output_safety, output_guard_info = self._finalize_response_text(
-                    response_text,
+                retry_text = route_result.provider_result.content
+                retry_provider = route_result.provider_used
+                retry_text, retry_output_safety, retry_output_guard_info, retry_sanitized_empty = self._finalize_response_text(
+                    retry_text,
                     orchestration_markup_removed=False,
                 )
+                retry_substance = answer_substance_score(retry_text)
+                first_substance = answer_substance_score(first_response_text)
+                keep_retry = retry_substance > 0 and (
+                    first_substance == 0 or retry_substance >= first_substance
+                )
+                if keep_retry:
+                    response_text = retry_text
+                    output_safety = retry_output_safety
+                    output_guard_info = retry_output_guard_info
+                    sanitized_empty = retry_sanitized_empty
+                    provider_used = retry_provider
+                    raw_provider_health = getattr(route_result, "provider_health", None)
+                    if isinstance(raw_provider_health, dict):
+                        provider_health_info = ProviderHealthInfo.model_validate(raw_provider_health)
+                    usage = Usage(
+                        prompt_tokens=usage.prompt_tokens + route_result.provider_result.usage.prompt_tokens,
+                        completion_tokens=usage.completion_tokens + route_result.provider_result.usage.completion_tokens,
+                        total_tokens=usage.total_tokens + route_result.provider_result.usage.total_tokens,
+                    )
+                else:
+                    response_text = first_response_text
+                    output_safety = first_output_safety
+                    output_guard_info = first_output_guard_info
+                    sanitized_empty = first_sanitized_empty
                 log_safe(
                     self.logger,
-                    "empty_answer_retry",
+                    "quality_answer_retry",
                     request_id=request_id,
                     model_alias=request.model,
                     provider_used=provider_used,
-                    error_code="",
+                    error_code=quality_retry_reason or "",
+                )
+                lifecycle.emit(
+                    "answer_quality.retry",
+                    status="retry",
+                    error_code=quality_retry_reason,
                 )
 
             if provider_used:
                 lifecycle.emit(
                     "chat.provider_selected",
                     provider=provider_used,
-                    status="retry" if empty_retry_attempted else "ok",
+                    status="retry" if quality_retry_attempted else "ok",
                 )
 
+            context_signals = compute_context_signals(
+                retrieval=retrieval,
+                tools=tools_meta,
+                sources=sources,
+                planner=planner,
+            )
             response_text, answer_quality = evaluate_answer_quality(
                 response_text,
                 retrieval=retrieval,
@@ -365,17 +412,27 @@ class ChatOrchestrator:
                 planner=planner,
                 output_safety=output_safety,
                 streaming=False,
+                context_available=context_signals.context_available,
+                context_signal_count=context_signals.context_signal_count,
             )
-            if empty_retry_attempted or answer_quality.action == "fallback_empty":
-                quality_updates: dict[str, object] = {
-                    "retry_attempted": empty_retry_attempted,
+            answer_quality = answer_quality.model_copy(
+                update={
+                    "retry_attempted": quality_retry_attempted,
+                    "retry_reason": quality_retry_reason,
+                    "weak_answer_before_retry": weak_answer_before_retry,
+                    "sanitized_empty": sanitized_empty,
                     "empty_before_fallback": empty_before_quality_check and answer_quality.action == "fallback_empty",
+                    "context_available": context_signals.context_available,
+                    "context_signal_count": context_signals.context_signal_count,
                 }
-                answer_quality = answer_quality.model_copy(update=quality_updates)
-            if empty_retry_attempted:
+            )
+            if quality_retry_attempted:
                 answer_quality = answer_quality.model_copy(
                     update={
-                        "flags": self._merge_quality_flags(answer_quality.flags, ["empty_retry_attempted"]),
+                        "flags": self._merge_quality_flags(
+                            answer_quality.flags,
+                            ["quality_retry_attempted"],
+                        ),
                     }
                 )
             if answer_quality.flags:
@@ -605,6 +662,18 @@ class ChatOrchestrator:
                 planner=outcome.planner,
                 output_safety=outcome.output_safety,
                 streaming=True,
+                context_available=compute_context_signals(
+                    retrieval=outcome.retrieval,
+                    tools=outcome.tools,
+                    sources=outcome.sources,
+                    planner=outcome.planner,
+                ).context_available,
+                context_signal_count=compute_context_signals(
+                    retrieval=outcome.retrieval,
+                    tools=outcome.tools,
+                    sources=outcome.sources,
+                    planner=outcome.planner,
+                ).context_signal_count,
             )
 
             outcome.guard = self._combine_guard_info(input_guard_info, output_guard_info)
@@ -704,38 +773,24 @@ class ChatOrchestrator:
             ordered.append(normalized)
         return ordered
 
-    @staticmethod
-    def _should_retry_empty_answer(
-        *,
-        retrieval: RetrievalInfo,
-        tools_meta: ToolMetadata,
-        planner: PlannerInfo,
-        orchestration: OrchestrationInfo,
-    ) -> bool:
-        if bool(getattr(retrieval, "context_used", False)) or bool(getattr(retrieval, "search_used", False)):
-            return True
-        if bool(getattr(tools_meta, "used", None)):
-            return True
-        if bool(getattr(planner, "search_used", False)) or bool(getattr(planner, "tools_used", None)):
-            return True
-        if bool(getattr(orchestration, "used", False)):
-            return True
-        return False
-
     def _finalize_response_text(
         self,
         response_text: str,
         *,
         orchestration_markup_removed: bool,
-    ) -> tuple[str, OutputSafetyInfo, GuardInfo]:
+    ) -> tuple[str, OutputSafetyInfo, GuardInfo, bool]:
         output_guard_info = GuardInfo()
+        sanitized_text, safety_meta = sanitize_internal_tool_markup(response_text)
+        detected = bool(safety_meta.get("internal_tool_markup_detected"))
+        removed = bool(safety_meta.get("internal_tool_markup_removed"))
+        sanitized_empty = detected and not str(sanitized_text or "").strip()
         response_text, output_safety = self._sanitize_internal_tool_markup_response(response_text)
         if orchestration_markup_removed:
             output_safety.internal_tool_markup_detected = True
             output_safety.internal_tool_markup_removed = True
         if self.enable_output_guard:
             response_text, output_guard_info = self.output_guard.scan_text(response_text)
-        return response_text, output_safety, output_guard_info
+        return response_text, output_safety, output_guard_info, sanitized_empty
 
     @staticmethod
     def _sanitize_internal_tool_markup_response(text: str) -> tuple[str, OutputSafetyInfo]:
@@ -1047,6 +1102,8 @@ class ChatOrchestrator:
         )
         if assembly.context_text:
             messages = append_retrieval_context(messages, assembly.context_text)
+            if search_used or tool_used or sources or semantic_recall_info.used or fts_used:
+                messages = append_synthesis_when_context_present(messages)
 
         retrieval_info = self._build_retrieval_info(
             request=request,
@@ -1317,6 +1374,7 @@ class ChatOrchestrator:
                             source="tools",
                             content=f"[Tool: {tool_name}]\nResult: {tool_context}",
                             title=tool_name,
+                            score=0.95,
                             metadata={"success": True},
                         )
                     )

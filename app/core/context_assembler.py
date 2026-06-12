@@ -8,10 +8,15 @@ from typing import Any, Iterable, Mapping, Sequence
 _DEFAULT_DEDUP_SIMILARITY = 0.96
 _SOURCE_PRIORITY: dict[str, int] = {
     "pinned_memory": 0,
+    "tools": 5,
+    "search": 8,
+    "fts": 15,
+    "semantic_recall": 20,
+}
+_PINNED_SOURCE_PRIORITY: dict[str, int] = {
+    "pinned_memory": 0,
     "semantic_recall": 10,
     "fts": 20,
-    "search": 30,
-    "tools": 40,
 }
 
 
@@ -136,7 +141,8 @@ def normalize_context_item(item: ContextItem) -> ContextItem:
 
 
 def _context_sort_key(item: ContextItem) -> tuple[int, int, float, str, str]:
-    priority = _SOURCE_PRIORITY.get(item.source, 50)
+    priority_map = _PINNED_SOURCE_PRIORITY if item.pinned else _SOURCE_PRIORITY
+    priority = priority_map.get(item.source, 50)
     pinned_rank = 0 if item.pinned else 1
     score = float(item.score or 0.0)
     title = item.title or ""

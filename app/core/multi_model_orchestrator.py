@@ -484,6 +484,13 @@ class NestyProMultiModelOrchestrator:
                 extra_rules.append(
                     "- Web search was planned but NOT used. Do not claim to have searched or checked the web/online."
                 )
+
+        retrieval_meta = (context_metadata or {}).get("retrieval")
+        if role == "finalizer" and retrieval_meta and bool(getattr(retrieval_meta, "context_used", False)):
+            extra_rules.append(
+                "- Retrieved context is available. Answer concretely from the provided context. "
+                "Do not claim information is missing when relevant context is present."
+            )
         
         if extra_rules:
             role_instruction += "\n" + "\n".join(extra_rules)

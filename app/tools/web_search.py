@@ -56,7 +56,7 @@ def _tokenize(text: str) -> set[str]:
 
 def _is_low_value_result(title: str, snippet: str) -> bool:
     combined = f"{title} {snippet}".lower()
-    if len(snippet.strip()) < 24:
+    if len(f"{title} {snippet}".strip()) < 24:
         return True
     return any(marker in combined for marker in _LOW_VALUE_SNIPPET_MARKERS)
 

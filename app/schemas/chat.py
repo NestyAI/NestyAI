@@ -144,6 +144,10 @@ class AnswerQualityInfo(BaseModel):
     empty_before_fallback: bool = False
     retry_attempted: bool = False
     sanitized_empty: bool = False
+    retry_reason: str | None = None
+    weak_answer_before_retry: bool = False
+    context_available: bool = False
+    context_signal_count: int = 0
 
 
 class PlannerInfo(BaseModel):

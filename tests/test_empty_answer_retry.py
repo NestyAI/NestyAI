@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.config import ModelProfile, ModelsConfig, ProviderTarget, Settings
+from app.core.answer_quality import assess_quality_retry
 from app.core.orchestrator import ChatOrchestrator
 from app.guards.context_guard import ContextGuard
 from app.guards.input_guard import InputGuard
@@ -11,13 +12,12 @@ from app.schemas.chat import (
     ChatCompletionRequest,
     ChatMessage,
     GuardInfo,
-    OrchestrationInfo,
     PlannerInfo,
     RetrievalInfo,
     SemanticRecallInfo,
 )
 from app.schemas.provider import ProviderChatResult, ProviderUsage
-from app.schemas.tools import ToolMetadata
+from app.schemas.tools import SourceItem, ToolMetadata
 from app.tools.registry import ToolRegistry
 from app.utils.logging import get_logger
 
@@ -82,26 +82,23 @@ def _orchestrator(db_path: str, router: _CountingRouter) -> ChatOrchestrator:
     )
 
 
-def test_should_retry_empty_answer_when_retrieval_context_used() -> None:
+def test_assess_quality_retry_when_retrieval_context_used() -> None:
     assert (
-        ChatOrchestrator._should_retry_empty_answer(
+        assess_quality_retry(
+            "",
             retrieval=RetrievalInfo(context_used=True),
-            tools_meta=ToolMetadata(),
-            planner=PlannerInfo(),
-            orchestration=OrchestrationInfo(),
-        )
+            sources=[SourceItem(title="A", url="https://example.com/a", snippet="Snippet text here.")],
+        ).should_retry
         is True
     )
 
 
-def test_should_not_retry_empty_answer_without_context_or_tools() -> None:
+def test_assess_quality_retry_without_substantive_context() -> None:
     assert (
-        ChatOrchestrator._should_retry_empty_answer(
+        assess_quality_retry(
+            "",
             retrieval=RetrievalInfo(),
-            tools_meta=ToolMetadata(),
-            planner=PlannerInfo(),
-            orchestration=OrchestrationInfo(),
-        )
+        ).should_retry
         is False
     )
 
@@ -138,7 +135,7 @@ async def test_empty_answer_retry_when_retrieval_context_used(tmp_path, monkeypa
     response = await orchestrator.create_chat_completion("req_retry_1", request)
     assert response.choices[0].message.content == "Retried useful answer."
     assert router.calls == 2
-    assert "empty_retry_attempted" in response.answer_quality.flags
+    assert "quality_retry_attempted" in response.answer_quality.flags or response.answer_quality.retry_attempted
 
 
 @pytest.mark.asyncio
@@ -173,4 +170,5 @@ async def test_empty_answer_no_retry_without_retrieval_context(tmp_path, monkeyp
     response = await orchestrator.create_chat_completion("req_retry_2", request)
     assert "couldn't generate a useful response" in response.choices[0].message.content
     assert router.calls == 1
-    assert "empty_retry_attempted" not in response.answer_quality.flags
+    assert "quality_retry_attempted" not in response.answer_quality.flags
+    assert response.answer_quality.retry_attempted is False

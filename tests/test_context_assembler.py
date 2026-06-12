@@ -47,6 +47,32 @@ def test_context_assembler_keeps_detailed_evidence_even_when_summary_overlaps() 
     assert result.context_items_count == 1
 
 
+def test_context_assembler_prioritizes_high_score_search_and_tool_items() -> None:
+    items = [
+        build_context_item(
+            source="semantic_recall",
+            content="Generic memory context without specific release details.",
+            score=0.4,
+        ),
+        build_context_item(
+            source="search",
+            content="Release notes: streaming reliability improved in version 0.115.",
+            score=0.9,
+        ),
+        build_context_item(
+            source="tools",
+            content="Tool result: package version 0.115.0 confirmed.",
+            score=0.95,
+        ),
+    ]
+
+    result = assemble_hybrid_context(items, summary_text="", budget_chars=260)
+
+    assert result.items[0].source == "tools"
+    assert "0.115.0" in result.context_text
+    assert "streaming reliability improved" in result.context_text
+
+
 def test_context_assembler_truncates_to_budget() -> None:
     items = [
         build_context_item(

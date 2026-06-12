@@ -2032,6 +2032,32 @@
             "type": "boolean",
             "title": "Sanitized Empty",
             "default": false
+          },
+          "retry_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Reason"
+          },
+          "weak_answer_before_retry": {
+            "type": "boolean",
+            "title": "Weak Answer Before Retry",
+            "default": false
+          },
+          "context_available": {
+            "type": "boolean",
+            "title": "Context Available",
+            "default": false
+          },
+          "context_signal_count": {
+            "type": "integer",
+            "title": "Context Signal Count",
+            "default": 0
           }
         },
         "type": "object",

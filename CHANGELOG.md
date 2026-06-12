@@ -7,6 +7,26 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.4.1] - 2026-06-11
+
+### Added
+- Added conservative weak-answer detection when substantive retrieval/search/tool context was available but the model returned generic missing-info or vague low-substance replies.
+- Added unified quality retry (max one) with a compact safe retry instruction for empty, sanitized-empty, or weak answers.
+- Extended safe `answer_quality` metadata: `retry_reason`, `weak_answer_before_retry`, `context_available`, `context_signal_count`.
+
+### Changed
+- Quality retry keeps the better non-empty first answer when the retry is empty or lower substance.
+- Synthesis/context-use instruction is appended at most once per request when substantive context exists.
+- Tool context items receive higher assembler priority; search snippet filtering accepts short snippets when title+snippet are useful together.
+- Pro finalizer and model behavior prompts encourage direct answers from provided context.
+
+### Fixed
+- Safety refusals and output-redacted responses never trigger quality retry.
+- Empty fallback remains the final safety net after a single quality retry.
+
+### Security
+- No prompts, secrets, raw provider payloads, stack traces, or chain-of-thought are exposed in metadata or retry instructions.
+
 ## [1.4.0] - 2026-06-11
 
 ### Added
