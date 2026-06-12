@@ -117,6 +117,23 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
         *   `orchestration`: `"auto"`, `"off"`, `"force"`
         *   `semantic_recall`: `"auto"`, `"on"`, `"off"`
         *   `summary`: `"auto"`, `"off"`, `"force"`
+*   **Response (400 Bad Request) — Safety policy (v1.5.2+)**:
+    Returned before provider/search/tool calls when `NESTY_SAFETY_POLICY_MODE=enforce` and input matches high-confidence unsafe patterns.
+    ```json
+    {
+      "error": {
+        "message": "I can't help extract or reveal secrets...",
+        "type": "policy_error",
+        "param": null,
+        "code": "secret_exfiltration_blocked",
+        "details": {
+          "reason_code": "secret_exfiltration",
+          "request_id": "..."
+        }
+      }
+    }
+    ```
+    Policy codes: `safety_violation`, `secret_exfiltration_blocked`, `malicious_cyber_request`, `unsafe_output_blocked`, `prompt_injection_detected`. See [SECURITY.md](SECURITY.md).
 *   **Response (200 OK) Non-Streaming**:
     ```json
     {
@@ -199,7 +216,11 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
       "provider_health": null,
       "output_safety": {
         "internal_tool_markup_detected": false,
-        "internal_tool_markup_removed": false
+        "internal_tool_markup_removed": false,
+        "output_redacted": false,
+        "unsafe_output_blocked": false,
+        "redaction_count": 0,
+        "output_guard_reason": null
       },
       "answer_quality": {
         "checked": false,

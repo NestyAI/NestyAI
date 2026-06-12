@@ -30,7 +30,7 @@ def main() -> int:
     for message in safe_messages:
         print(f"  {message.role}: {message.content}")
 
-    output_text, output_meta = output_guard.scan_text(
+    output_text, output_meta, _output_safety = output_guard.scan_text(
         "Use this key: gsk_ABCDEFGHIJKLMNOPQRSTUV123456 and call me at +84901234567"
     )
     print("\nOutputGuard")

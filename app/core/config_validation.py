@@ -331,6 +331,12 @@ def validate_runtime_setup(settings: Settings | None = None) -> list[dict[str, A
         "OPENROUTER_API_KEY": s.openrouter_api_key,
         "NVIDIA_API_KEY": s.nvidia_api_key,
         "OLLAMA_API_KEY": s.ollama_api_key,
+        "DEEPSEEK_API_KEY": s.deepseek_api_key,
+        "OPENAI_API_KEY": getattr(s, "openai_api_key", None),
+        "MISTRAL_API_KEY": getattr(s, "mistral_api_key", None),
+        "Z_AI_API_KEY": getattr(s, "z_ai_api_key", None),
+        "GOOGLE_GEMINI_API_KEY": getattr(s, "google_gemini_api_key", None),
+        "ANTHROPIC_API_KEY": getattr(s, "anthropic_claude_api_key", None),
     }
 
     set_keys = [k for k, v in provider_keys.items() if v and len(v.strip()) > 0]
@@ -348,7 +354,7 @@ def validate_runtime_setup(settings: Settings | None = None) -> list[dict[str, A
         results.append({
             "name": "provider_api_keys",
             "status": "WARN",
-            "message": "No provider API keys are configured (GROQ_API_KEY, OPENROUTER_API_KEY, NVIDIA_API_KEY, OLLAMA_API_KEY). At least one is required to route chat completions."
+            "message": "No provider API keys are configured (GROQ_API_KEY, OPENROUTER_API_KEY, NVIDIA_API_KEY, OLLAMA_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY, MISTRAL_API_KEY, Z_AI_API_KEY, GOOGLE_GEMINI_API_KEY, ANTHROPIC_API_KEY). At least one is required to route chat completions."
         })
     else:
         results.append({

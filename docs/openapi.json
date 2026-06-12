@@ -2334,6 +2334,365 @@
         }
       }
     },
+    "/internal/console/runtime/builtin-providers": {
+      "get": {
+        "tags": [
+          "internal-console-builtin-credentials"
+        ],
+        "summary": "List Builtin Providers",
+        "operationId": "list_builtin_providers_internal_console_runtime_builtin_providers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response List Builtin Providers Internal Console Runtime Builtin Providers Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/builtin-providers/{provider_id}": {
+      "get": {
+        "tags": [
+          "internal-console-builtin-credentials"
+        ],
+        "summary": "Get Builtin Provider",
+        "operationId": "get_builtin_provider_internal_console_runtime_builtin_providers__provider_id__get",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Builtin Provider Internal Console Runtime Builtin Providers  Provider Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/builtin-providers/{provider_id}/credentials": {
+      "get": {
+        "tags": [
+          "internal-console-builtin-credentials"
+        ],
+        "summary": "List Builtin Provider Credentials",
+        "operationId": "list_builtin_provider_credentials_internal_console_runtime_builtin_providers__provider_id__credentials_get",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response List Builtin Provider Credentials Internal Console Runtime Builtin Providers  Provider Id  Credentials Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/builtin-providers/{provider_id}/credentials/api-key": {
+      "put": {
+        "tags": [
+          "internal-console-builtin-credentials"
+        ],
+        "summary": "Put Builtin Provider Api Key",
+        "operationId": "put_builtin_provider_api_key_internal_console_runtime_builtin_providers__provider_id__credentials_api_key_put",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuiltinApiKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Put Builtin Provider Api Key Internal Console Runtime Builtin Providers  Provider Id  Credentials Api Key Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "internal-console-builtin-credentials"
+        ],
+        "summary": "Delete Builtin Provider Api Key",
+        "operationId": "delete_builtin_provider_api_key_internal_console_runtime_builtin_providers__provider_id__credentials_api_key_delete",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Delete Builtin Provider Api Key Internal Console Runtime Builtin Providers  Provider Id  Credentials Api Key Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/builtin-providers/{provider_id}/credentials/api-key/rotate": {
+      "post": {
+        "tags": [
+          "internal-console-builtin-credentials"
+        ],
+        "summary": "Rotate Builtin Provider Api Key",
+        "operationId": "rotate_builtin_provider_api_key_internal_console_runtime_builtin_providers__provider_id__credentials_api_key_rotate_post",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuiltinApiKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Rotate Builtin Provider Api Key Internal Console Runtime Builtin Providers  Provider Id  Credentials Api Key Rotate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/runtime/builtin-providers/{provider_id}/credentials/api-key/test": {
+      "post": {
+        "tags": [
+          "internal-console-builtin-credentials"
+        ],
+        "summary": "Test Builtin Provider Api Key Endpoint",
+        "operationId": "test_builtin_provider_api_key_endpoint_internal_console_runtime_builtin_providers__provider_id__credentials_api_key_test_post",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BuiltinApiKeyTestRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Test Builtin Provider Api Key Endpoint Internal Console Runtime Builtin Providers  Provider Id  Credentials Api Key Test Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/security/admin-token/status": {
+      "get": {
+        "tags": [
+          "internal-console-security"
+        ],
+        "summary": "Get Admin Token Status",
+        "operationId": "get_admin_token_status_internal_console_security_admin_token_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Admin Token Status Internal Console Security Admin Token Status Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/console/security/admin-token/rotate": {
+      "post": {
+        "tags": [
+          "internal-console-security"
+        ],
+        "summary": "Rotate Admin Token",
+        "operationId": "rotate_admin_token_internal_console_security_admin_token_rotate_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Rotate Admin Token Internal Console Security Admin Token Rotate Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/internal/console/runtime/status": {
       "get": {
         "tags": [
@@ -2663,6 +3022,45 @@
           "key_name"
         ],
         "title": "AuthDebugInfo"
+      },
+      "BuiltinApiKeyRequest": {
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Api Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "api_key"
+        ],
+        "title": "BuiltinApiKeyRequest"
+      },
+      "BuiltinApiKeyTestRequest": {
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Message",
+            "default": "Reply with exactly: OK"
+          }
+        },
+        "type": "object",
+        "title": "BuiltinApiKeyTestRequest"
       },
       "ChatChoice": {
         "properties": {
@@ -4027,6 +4425,32 @@
             "type": "boolean",
             "title": "Internal Tool Markup Removed",
             "default": false
+          },
+          "output_redacted": {
+            "type": "boolean",
+            "title": "Output Redacted",
+            "default": false
+          },
+          "unsafe_output_blocked": {
+            "type": "boolean",
+            "title": "Unsafe Output Blocked",
+            "default": false
+          },
+          "redaction_count": {
+            "type": "integer",
+            "title": "Redaction Count",
+            "default": 0
+          },
+          "output_guard_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Guard Reason"
           }
         },
         "type": "object",

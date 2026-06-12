@@ -135,6 +135,10 @@ class ProviderHealthInfo(BaseModel):
 class OutputSafetyInfo(BaseModel):
     internal_tool_markup_detected: bool = False
     internal_tool_markup_removed: bool = False
+    output_redacted: bool = False
+    unsafe_output_blocked: bool = False
+    redaction_count: int = 0
+    output_guard_reason: str | None = None
 
 
 class AnswerQualityInfo(BaseModel):

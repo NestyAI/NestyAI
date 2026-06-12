@@ -14,6 +14,9 @@ class GuardPattern:
 
 GUARD_PATTERNS: list[GuardPattern] = [
     GuardPattern("openai_key", "secret", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
+    GuardPattern("nesty_admin_token", "secret", re.compile(r"\bnia_[A-Za-z0-9]{8,}\b")),
+    GuardPattern("nesty_api_key", "secret", re.compile(r"\bnsk_[A-Za-z0-9_]{8,}\b")),
+    GuardPattern("nesty_console_secret", "secret", re.compile(r"\bncc_[A-Za-z0-9]{8,}\b")),
     GuardPattern("groq_key", "secret", re.compile(r"\bgsk_[A-Za-z0-9]{20,}\b")),
     GuardPattern("openrouter_key", "secret", re.compile(r"\bsk-or-v1-[A-Za-z0-9]{20,}\b")),
     GuardPattern("google_api_key", "secret", re.compile(r"\bAIza[0-9A-Za-z\-_]{20,}\b")),

@@ -23,6 +23,7 @@ from app.core.runtime_providers.validation import (
     validate_runtime_provider_payload,
 )
 from app.providers.constants import BUILTIN_PROVIDER_IDS
+from app.security.secret_redaction import redact_secret_text
 from app.schemas.chat import ChatMessage
 
 
@@ -158,11 +159,12 @@ async def run_runtime_provider_test(
     except MissingAPIKeyError:
         return {"ok": False, "error_code": "missing_api_key", "status": "failed"}
     except ProviderError as exc:
+        warning = redact_secret_text(str(exc.message or "Provider test failed.")[:120])
         return {
             "ok": False,
             "error_code": "provider_failed",
             "status": "failed",
-            "warnings": [str(exc.message or "Provider test failed.")[:120]],
+            "warnings": [warning],
         }
     except Exception:
         return {"ok": False, "error_code": "runtime_provider_test_failed", "status": "failed"}

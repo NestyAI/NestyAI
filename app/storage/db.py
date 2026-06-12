@@ -178,6 +178,7 @@ def init_db(db_path: str) -> None:
         _ensure_provider_health_checks_table(conn)
         _ensure_runtime_gateway_tables(conn)
         _ensure_runtime_provider_definitions_table(conn)
+        _ensure_provider_credentials_table(conn)
         conn.commit()
     _try_init_conversation_fts(db_path)
 
@@ -276,6 +277,30 @@ def _ensure_runtime_provider_definitions_table(conn: sqlite3.Connection) -> None
         "CREATE INDEX IF NOT EXISTS idx_runtime_provider_definitions_enabled "
         "ON runtime_provider_definitions(enabled, provider_id)"
     )
+
+
+
+def _ensure_provider_credentials_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS provider_credentials (
+            provider_id TEXT NOT NULL,
+            credential_name TEXT NOT NULL DEFAULT 'api_key',
+            source TEXT NOT NULL,
+            secret_ref TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_rotated_at TEXT,
+            PRIMARY KEY (provider_id, credential_name)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_provider_credentials_provider "
+        "ON provider_credentials(provider_id, credential_name)"
+    )
+
 
 def _ensure_runtime_gateway_tables(conn: sqlite3.Connection) -> None:
     conn.execute(

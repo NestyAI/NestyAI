@@ -76,6 +76,7 @@ class Settings(BaseModel):
     nesty_internal_admin_token_mode: str = "env"
     internal_admin_token_file: str = ".nesty/internal_admin_token"
     nesty_print_bootstrap_admin_token: bool = False
+    nesty_internal_admin_token_rotate_on_start: bool = False
     internal_admin_token_source: str | None = None
     internal_admin_token_file_resolved: str | None = None
     nesty_console_client_auth_required: bool = False
@@ -87,11 +88,24 @@ class Settings(BaseModel):
     console_client_secret_source: str | None = None
     console_client_secret_file_resolved: str | None = None
     deepseek_api_key: str | None = None
+    openai_api_key: str | None = None
+    mistral_api_key: str | None = None
+    z_ai_api_key: str | None = None
+    z_ai_base_url: str = "https://api.z.ai/v1"
+    google_gemini_api_key: str | None = None
+    anthropic_claude_api_key: str | None = None
+    nesty_provider_credentials_enabled: bool = False
+    nesty_provider_credential_source_priority: str = "managed,secret_file,env"
+    nesty_provider_secret_dir: str = ".nesty/provider_secrets"
+    nesty_provider_credential_store: str = "sqlite"
+    nesty_upstash_redis_rest_url: str | None = None
+    nesty_upstash_redis_rest_token: str | None = None
     nesty_runtime_openai_providers_enabled: bool = True
     nesty_runtime_provider_secret_mode: str = "file"
     nesty_runtime_provider_secret_dir: str = ".nesty/provider_secrets"
     nesty_runtime_provider_allow_http: bool = False
     nesty_runtime_provider_allow_private_base_url: bool = False
+    nesty_safety_policy_mode: str = "enforce"
     embeddings_enabled: bool = False
     embeddings_provider: str = "openrouter"
     embeddings_model: str = "nvidia/llama-nemotron-embed-vl-1b-v2:free"
@@ -207,6 +221,9 @@ class Settings(BaseModel):
             nesty_internal_admin_token_mode=os.getenv("NESTY_INTERNAL_ADMIN_TOKEN_MODE", "env"),
             internal_admin_token_file=os.getenv("INTERNAL_ADMIN_TOKEN_FILE", ".nesty/internal_admin_token"),
             nesty_print_bootstrap_admin_token=_to_bool(os.getenv("NESTY_PRINT_BOOTSTRAP_ADMIN_TOKEN"), False),
+            nesty_internal_admin_token_rotate_on_start=_to_bool(
+                os.getenv("NESTY_INTERNAL_ADMIN_TOKEN_ROTATE_ON_START"), False
+            ),
             nesty_console_client_auth_required=_to_bool(os.getenv("NESTY_CONSOLE_CLIENT_AUTH_REQUIRED"), False),
             nesty_console_client_id=os.getenv("NESTY_CONSOLE_CLIENT_ID", "default-console"),
             nesty_console_client_secret=os.getenv("NESTY_CONSOLE_CLIENT_SECRET"),
@@ -214,6 +231,20 @@ class Settings(BaseModel):
             nesty_console_client_secret_file=os.getenv("NESTY_CONSOLE_CLIENT_SECRET_FILE", ".nesty/console_client_secret"),
             nesty_print_bootstrap_console_secret=_to_bool(os.getenv("NESTY_PRINT_BOOTSTRAP_CONSOLE_SECRET"), False),
             deepseek_api_key=os.getenv("DEEPSEEK_API_KEY"),
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            mistral_api_key=os.getenv("MISTRAL_API_KEY"),
+            z_ai_api_key=os.getenv("Z_AI_API_KEY"),
+            z_ai_base_url=str(os.getenv("Z_AI_BASE_URL", "https://api.z.ai/v1") or "https://api.z.ai/v1").rstrip("/"),
+            google_gemini_api_key=os.getenv("GOOGLE_GEMINI_API_KEY"),
+            anthropic_claude_api_key=os.getenv("ANTHROPIC_API_KEY"),
+            nesty_provider_credentials_enabled=_to_bool(os.getenv("NESTY_PROVIDER_CREDENTIALS_ENABLED"), False),
+            nesty_provider_credential_source_priority=os.getenv(
+                "NESTY_PROVIDER_CREDENTIAL_SOURCE_PRIORITY", "managed,secret_file,env"
+            ),
+            nesty_provider_secret_dir=os.getenv("NESTY_PROVIDER_SECRET_DIR", ".nesty/provider_secrets"),
+            nesty_provider_credential_store=os.getenv("NESTY_PROVIDER_CREDENTIAL_STORE", "sqlite"),
+            nesty_upstash_redis_rest_url=os.getenv("NESTY_UPSTASH_REDIS_REST_URL"),
+            nesty_upstash_redis_rest_token=os.getenv("NESTY_UPSTASH_REDIS_REST_TOKEN"),
             nesty_runtime_openai_providers_enabled=_to_bool(os.getenv("NESTY_RUNTIME_OPENAI_PROVIDERS_ENABLED"), True),
             nesty_runtime_provider_secret_mode=os.getenv("NESTY_RUNTIME_PROVIDER_SECRET_MODE", "file"),
             nesty_runtime_provider_secret_dir=os.getenv("NESTY_RUNTIME_PROVIDER_SECRET_DIR", ".nesty/provider_secrets"),
@@ -221,6 +252,7 @@ class Settings(BaseModel):
             nesty_runtime_provider_allow_private_base_url=_to_bool(
                 os.getenv("NESTY_RUNTIME_PROVIDER_ALLOW_PRIVATE_BASE_URL"), False
             ),
+            nesty_safety_policy_mode=str(os.getenv("NESTY_SAFETY_POLICY_MODE", "enforce") or "enforce").strip().lower(),
             embeddings_enabled=_to_bool(os.getenv("EMBEDDINGS_ENABLED"), False),
             embeddings_provider=os.getenv("EMBEDDINGS_PROVIDER", "openrouter"),
             embeddings_model=os.getenv("EMBEDDINGS_MODEL", "nvidia/llama-nemotron-embed-vl-1b-v2:free"),

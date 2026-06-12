@@ -85,6 +85,11 @@ ERROR_CODES = {
     "unsupported_parameter",
     "invalid_message",
     "api_key_revoked",
+    "safety_violation",
+    "prompt_injection_detected",
+    "secret_exfiltration_blocked",
+    "malicious_cyber_request",
+    "unsafe_output_blocked",
 }
 
 
@@ -142,6 +147,15 @@ _INVALID_REQUEST_ERROR_CODES = {
 }
 
 
+_POLICY_ERROR_CODES = {
+    "safety_violation",
+    "prompt_injection_detected",
+    "secret_exfiltration_blocked",
+    "malicious_cyber_request",
+    "unsafe_output_blocked",
+}
+
+
 def resolve_error_type(code: str, status_code: int = 400) -> str:
     if code in _AUTHENTICATION_ERROR_CODES:
         return "authentication_error"
@@ -151,6 +165,8 @@ def resolve_error_type(code: str, status_code: int = 400) -> str:
         return "rate_limit_error"
     if code in _PROVIDER_ERROR_CODES:
         return "provider_error"
+    if code in _POLICY_ERROR_CODES:
+        return "policy_error"
     if code in _INVALID_REQUEST_ERROR_CODES:
         return "invalid_request_error"
     if code == "internal_server_error" or status_code >= 500:

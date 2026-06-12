@@ -150,7 +150,7 @@ async def summarize_conversation(
         return None
 
     guard = OutputGuard(rules=get_guard_rules())
-    sanitized_summary, _guard_meta = guard.scan_text(summary_text)
+    sanitized_summary, _guard_meta, _output_safety = guard.scan_text(summary_text)
     max_chars = max(1, int(getattr(config, "conversation_summary_max_chars", 4000)))
     if len(sanitized_summary) > max_chars:
         sanitized_summary = sanitized_summary[:max_chars].rstrip()

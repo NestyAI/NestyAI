@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from urllib.parse import urlparse
@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from app.config import ModelProfile, ModelsConfig, Settings
 from app.core.internal_tool_markup import sanitize_internal_tool_markup
 from app.core.errors import APIError
+from app.guards.safety_policy import build_policy_error_details, reason_to_api_code, user_refusal_message
 from app.core.answer_quality import (
     answer_substance_score,
     assess_quality_retry,
@@ -630,8 +631,12 @@ class ChatOrchestrator:
             if self.enable_output_guard:
                 safe_stream_text, stream_output_safety = self._sanitize_internal_tool_markup_response("".join(full_output_parts))
                 outcome.output_safety = stream_output_safety
-                sanitized_text, output_guard_info = self.output_guard.scan_text(safe_stream_text)
-                if output_guard_info.output_redacted:
+                sanitized_text, output_guard_info, policy_output_safety = self.output_guard.scan_text(safe_stream_text)
+                outcome.output_safety.output_redacted = policy_output_safety.output_redacted
+                outcome.output_safety.unsafe_output_blocked = policy_output_safety.unsafe_output_blocked
+                outcome.output_safety.redaction_count = policy_output_safety.redaction_count
+                outcome.output_safety.output_guard_reason = policy_output_safety.output_guard_reason
+                if output_guard_info.output_redacted or policy_output_safety.unsafe_output_blocked:
                     yield self._to_sse(
                         {
                             "id": completion_id,
@@ -789,8 +794,34 @@ class ChatOrchestrator:
             output_safety.internal_tool_markup_detected = True
             output_safety.internal_tool_markup_removed = True
         if self.enable_output_guard:
-            response_text, output_guard_info = self.output_guard.scan_text(response_text)
+            response_text, output_guard_info, policy_output_safety = self.output_guard.scan_text(response_text)
+            output_safety.output_redacted = policy_output_safety.output_redacted
+            output_safety.unsafe_output_blocked = policy_output_safety.unsafe_output_blocked
+            output_safety.redaction_count = policy_output_safety.redaction_count
+            output_safety.output_guard_reason = policy_output_safety.output_guard_reason
         return response_text, output_safety, output_guard_info, sanitized_empty
+
+    def _enforce_input_safety(self, latest_user_message: str, *, request_id: str) -> None:
+        policy_mode = str(getattr(self.settings, "nesty_safety_policy_mode", "enforce") or "enforce").strip().lower()
+        if policy_mode not in {"enforce", "audit"}:
+            policy_mode = "enforce"
+        decision = self.input_guard.safety_policy.classify_user_input(latest_user_message, mode=policy_mode)
+        if decision.action != "refuse":
+            return
+        api_code = reason_to_api_code(decision.reason_code)
+        raise APIError(
+            code=api_code,
+            message=decision.user_safe_message or user_refusal_message(decision.reason_code),
+            status_code=400,
+            details=build_policy_error_details(decision, request_id=request_id),
+        )
+
+    def _sanitize_retrieval_items(self, items: list[ContextItem]) -> list[ContextItem]:
+        sanitized: list[ContextItem] = []
+        for item in items:
+            clean_text, _removed = self.context_guard.sanitize_untrusted_text(item.content)
+            sanitized.append(replace(item, content=clean_text))
+        return sanitized
 
     @staticmethod
     def _sanitize_internal_tool_markup_response(text: str) -> tuple[str, OutputSafetyInfo]:
@@ -878,6 +909,7 @@ class ChatOrchestrator:
             messages, input_guard_info = self.input_guard.scan_messages(messages)
 
         latest_user_message = self._latest_user_message(messages)
+        self._enforce_input_safety(latest_user_message, request_id=request_id)
         for item in messages:
             if item.role != "system":
                 continue
@@ -1096,7 +1128,7 @@ class ChatOrchestrator:
         planner_info.tools_used = list(tool_used)
 
         assembly = assemble_hybrid_context(
-            retrieval_items,
+            self._sanitize_retrieval_items(retrieval_items),
             summary_text=summary_text,
             budget_chars=max(1, int(model_profile_dict.get("max_context_chars", 6000))),
         )

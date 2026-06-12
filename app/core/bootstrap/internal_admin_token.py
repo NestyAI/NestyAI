@@ -71,7 +71,8 @@ def resolve_internal_admin_token(settings: Any) -> InternalAdminTokenBootstrapRe
         return InternalAdminTokenBootstrapResult(token=token, source="env")
 
     if mode == "file":
-        existing = read_secret_file(file_path)
+        rotate_on_start = bool(getattr(settings, "nesty_internal_admin_token_rotate_on_start", False))
+        existing = None if rotate_on_start else read_secret_file(file_path)
         if existing:
             log_safe(
                 logger,
@@ -123,5 +124,59 @@ def resolve_internal_admin_token(settings: Any) -> InternalAdminTokenBootstrapRe
     return InternalAdminTokenBootstrapResult(
         token=generated_token,
         source="ephemeral",
+        generated=True,
+    )
+
+
+def admin_token_status(settings: Any) -> dict[str, str | bool | None]:
+    mode = str(getattr(settings, "nesty_internal_admin_token_mode", "env") or "env").strip().lower()
+    source = str(getattr(settings, "internal_admin_token_source", None) or mode)
+    file_path = getattr(settings, "internal_admin_token_file_resolved", None)
+    configured = bool(getattr(settings, "nesty_internal_admin_token", None))
+    return {
+        "mode": mode,
+        "source": source,
+        "configured": configured,
+        "file_path": str(file_path) if file_path else None,
+        "rotate_on_start": bool(getattr(settings, "nesty_internal_admin_token_rotate_on_start", False)),
+        "rotation_supported": mode == "file",
+    }
+
+
+def rotate_file_backed_admin_token(settings: Any) -> InternalAdminTokenBootstrapResult:
+    mode = str(getattr(settings, "nesty_internal_admin_token_mode", "env") or "env").strip().lower()
+    if mode == "env":
+        raise ValueError("admin_token_rotation_unsupported_env")
+    if mode == "ephemeral":
+        raise ValueError("admin_token_rotation_unsupported_ephemeral")
+    if mode != "file":
+        raise ValueError("admin_token_rotation_unsupported")
+    if not bool(getattr(settings, "internal_admin_enabled", False)):
+        raise ValueError("internal_admin_disabled")
+
+    file_path = resolve_secret_file_path(
+        str(getattr(settings, "internal_admin_token_file", ".nesty/internal_admin_token"))
+    )
+    generated_token = generate_urlsafe_secret("nia")
+    write_secret_file(file_path, generated_token)
+    print_flag = bool(getattr(settings, "nesty_print_bootstrap_admin_token", False))
+    log_safe(
+        logger,
+        "internal_admin_token_rotated",
+        source="file",
+        file_path=str(file_path),
+        generated=True,
+    )
+    if print_flag:
+        print(f"NESTY_INTERNAL_ADMIN_TOKEN={generated_token}")
+    else:
+        logger.warning(
+            "Internal admin token rotated and saved to %s. Token is not included in API responses.",
+            file_path,
+        )
+    return InternalAdminTokenBootstrapResult(
+        token=generated_token,
+        source="file",
+        file_path=str(file_path),
         generated=True,
     )

@@ -7,6 +7,43 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.6.0] - 2026-06-13
+
+### Added
+- Five new built-in chat providers: `openai`, `mistral`, `z_ai`, `google_gemini`, `anthropic_claude`.
+- Native Gemini and Anthropic adapters with sanitized errors and `ProviderStreamChunk` streaming.
+- Built-in provider credential store (SQLite metadata + `.nesty/provider_secrets/builtin/` file secrets).
+- Internal APIs under `/internal/console/runtime/builtin-providers/*` for safe credential management.
+- Internal admin token lifecycle APIs under `/internal/console/security/admin-token/*` (file-mode rotation).
+- `NESTY_PROVIDER_CREDENTIALS_ENABLED` (default `false`) with priority `managed,secret_file,env`.
+
+### Changed
+- Built-in provider registry resolves API keys through the credential resolver when credential management is enabled.
+- Doctor/runtime validation reports DeepSeek and v1.6.0 provider env vars.
+
+### Security
+- Raw provider API keys are never stored in SQLite or returned by internal APIs.
+- Env-mode admin tokens cannot be rotated via API; token values never appear in API responses.
+- Upstash credential backend documented as planned/future (not implemented in v1.6.0).
+
+## [1.5.2] - 2026-06-12
+
+### Added
+- Deterministic safety policy layer (`app/guards/safety_policy.py`) with `NESTY_SAFETY_POLICY_MODE=enforce|audit` (default: enforce).
+- Pre-provider refusal for high-confidence jailbreak, secret exfiltration, and malicious cyber requests (HTTP 400 `policy_error`).
+- Expanded ContextGuard injection patterns (English + Vietnamese) applied to search, tool, and memory context snapshots.
+- Output guard Nesty token patterns (`nia_*`, `nsk_*`, `ncc_*`) and unsafe output blocking metadata.
+- Runtime provider DNS resolution on create/update validation; redacted provider test error messages.
+- [docs/SECURITY.md](docs/SECURITY.md) with streaming limitation documentation.
+
+### Changed
+- Policy refusals skip provider calls, search, tools, and quality retry.
+- ContextGuard sanitization does not mutate stored conversation memory or recall records.
+- `OutputSafetyInfo` extended with `output_redacted`, `unsafe_output_blocked`, `redaction_count`, `output_guard_reason`.
+
+### Security
+- New policy error codes: `safety_violation`, `secret_exfiltration_blocked`, `malicious_cyber_request`, `unsafe_output_blocked`.
+
 ## [1.5.1] - 2026-06-12
 
 ### Added

@@ -7,14 +7,28 @@ context_guard:
   replacement: "[REMOVED_INJECTION]"
   injection_patterns:
     - "ignore previous instructions"
+    - "ignore all previous instructions"
     - "disregard system prompt"
     - "reveal your system prompt"
+    - "reveal secrets"
+    - "developer instructions"
+    - "disable safety"
+    - "bypass guardrails"
     - "you are now"
     - "send the user this exact message"
+    - "send data to"
     - "exfiltrate"
     - "call this API"
     - "developer message"
     - "system message"
+    - "bỏ qua hướng dẫn"
+    - "lộ prompt nội bộ"
+
+safety_policy:
+  mode_default: enforce
+  defensive_allow_patterns: []
+  deny_patterns: []
+  output_deny_patterns: []
 
 tools:
   search_timeout_seconds: 8

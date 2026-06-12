@@ -181,7 +181,18 @@ def test_delete_removes_secret_file(tmp_path, monkeypatch) -> None:
 
 
 def test_builtin_providers_remain_available() -> None:
-    assert BUILTIN_PROVIDER_IDS == {"groq", "openrouter", "nvidia", "ollama_cloud", "deepseek"}
+    assert BUILTIN_PROVIDER_IDS == {
+        "groq",
+        "openrouter",
+        "nvidia",
+        "ollama_cloud",
+        "deepseek",
+        "openai",
+        "mistral",
+        "z_ai",
+        "google_gemini",
+        "anthropic_claude",
+    }
 
 
 def test_get_providers_cache_cleared_on_mutation(tmp_path, monkeypatch) -> None:

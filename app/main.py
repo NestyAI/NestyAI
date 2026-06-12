@@ -14,6 +14,8 @@ from app.api.health import router as health_router
 from app.api.internal_api_keys import router as internal_api_keys_router
 from app.api.internal_diagnostics import router as internal_diagnostics_router
 from app.api.internal_embeddings import router as internal_embeddings_router
+from app.api.internal_console_security import router as internal_console_security_router
+from app.api.internal_console_builtin_credentials import router as internal_console_builtin_credentials_router
 from app.api.internal_console_runtime_providers import router as internal_console_runtime_providers_router
 from app.api.internal_console_runtime import router as internal_console_runtime_router
 from app.api.internal_model_configs import router as internal_model_configs_router
@@ -123,6 +125,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(internal_diagnostics_router)
     app.include_router(internal_api_keys_router)
     app.include_router(internal_console_runtime_providers_router)
+    app.include_router(internal_console_builtin_credentials_router)
+    app.include_router(internal_console_security_router)
     app.include_router(internal_console_runtime_router)
 
     @app.exception_handler(APIError)

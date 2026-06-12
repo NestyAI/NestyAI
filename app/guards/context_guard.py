@@ -56,9 +56,8 @@ class ContextGuard:
             snippet = unescape(self._strip_html(result.snippet))
             url = result.url.strip()
             block = f"[Source {index}]\nTitle: {title}\nURL: {url}\nSnippet: {snippet}\n"
-            for pattern in self.injection_patterns:
-                block, count = pattern.subn(self.replacement, block)
-                removed_count += count
+            block, count = self._apply_injection_patterns(block)
+            removed_count += count
             lines.append(block)
 
         context = "\n".join(lines).strip()
@@ -72,5 +71,20 @@ class ContextGuard:
             removed_injection_count=removed_count,
             context_chars=len(context),
             sources_count=len(search_results),
+            prompt_injection_detected=removed_count > 0,
+            context_guard_action="sanitized" if removed_count > 0 else ("truncated" if sanitized and len(context) >= max_context_chars else "none"),
+            sanitized_context_items_count=len(search_results) if removed_count > 0 else 0,
         )
         return context, metadata
+
+    def _apply_injection_patterns(self, text: str) -> tuple[str, int]:
+        sanitized_text = text
+        removed_count = 0
+        for pattern in self.injection_patterns:
+            sanitized_text, count = pattern.subn(self.replacement, sanitized_text)
+            removed_count += count
+        return sanitized_text, removed_count
+
+    def sanitize_untrusted_text(self, text: str) -> tuple[str, int]:
+        stripped = self._strip_html(unescape(str(text or "")))
+        return self._apply_injection_patterns(stripped)

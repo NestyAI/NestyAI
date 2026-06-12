@@ -54,6 +54,9 @@ class ContextGuardMetadata(BaseModel):
     removed_injection_count: int = 0
     context_chars: int = 0
     sources_count: int = 0
+    prompt_injection_detected: bool = False
+    context_guard_action: str = "none"
+    sanitized_context_items_count: int = 0
 
 
 class ToolResult(BaseModel):
