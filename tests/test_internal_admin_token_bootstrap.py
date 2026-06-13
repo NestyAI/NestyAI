@@ -81,6 +81,37 @@ def test_resolve_bootstrap_credentials_updates_settings(monkeypatch) -> None:
     assert resolved.internal_admin_token_source == "ephemeral"
 
 
+def test_startup_banner_prints_ephemeral_admin_token(monkeypatch, capsys) -> None:
+    from app.core.bootstrap.internal_admin_token import print_internal_admin_token_startup_banner
+
+    monkeypatch.delenv("NESTY_INTERNAL_ADMIN_TOKEN", raising=False)
+    settings = Settings(
+        internal_admin_enabled=True,
+        nesty_internal_admin_token_mode="ephemeral",
+        nesty_print_bootstrap_admin_token=True,
+        nesty_internal_admin_token="nia_test_startup_banner_token_value",
+    )
+    print_internal_admin_token_startup_banner(settings)
+    captured = capsys.readouterr()
+    assert captured.out.count("EPHEMERAL NESTY INTERNAL ADMIN TOKEN") == 1
+    assert "nia_test_startup_banner_token_value" in captured.out
+
+
+def test_startup_banner_skips_when_env_token_mode(monkeypatch, capsys) -> None:
+    from app.core.bootstrap.internal_admin_token import print_internal_admin_token_startup_banner
+
+    monkeypatch.setenv("NESTY_INTERNAL_ADMIN_TOKEN", "nia_stable_env_token_123456")
+    settings = Settings(
+        internal_admin_enabled=True,
+        nesty_internal_admin_token_mode="env",
+        nesty_print_bootstrap_admin_token=True,
+        nesty_internal_admin_token="nia_stable_env_token_123456",
+    )
+    print_internal_admin_token_startup_banner(settings)
+    captured = capsys.readouterr()
+    assert "EPHEMERAL NESTY INTERNAL ADMIN TOKEN" not in captured.out
+
+
 def test_secrets_equal_uses_constant_time_path() -> None:
     assert secrets_equal("abc", "abc") is True
     assert secrets_equal("abc", "abd") is False

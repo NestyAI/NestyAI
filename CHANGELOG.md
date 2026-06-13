@@ -7,6 +7,23 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.6.1] - 2026-06-13
+
+### Added
+- OpenAI Client Compatibility Patch: chat requests accept string or text content-part arrays on `messages[].content`.
+- OpenAI-style function `tools` arrays are accepted for SDK compatibility (e.g. Cursor) but are not executed by Gateway.
+- Safe client-tools metadata on planner responses: `client_tools_count`, capped `client_tool_names`, `client_tool_choice_mode`, `client_tools_ignored`.
+- Explicit passthrough fields: `parallel_tool_calls`, `response_format`, legacy `functions` / `function_call` (accepted, ignored at runtime).
+
+### Changed
+- Request content parts are normalized to string before InputGuard, SafetyPolicy, PromptBuilder, and provider adapters.
+- Unsupported multimodal content parts are replaced with safe placeholders; URLs and binary payloads are never fetched or logged.
+- Validation error details are sanitized to avoid returning huge raw request payloads.
+
+### Security
+- Client-provided OpenAI tool schemas (descriptions, parameters) are never passed to providers, prompts, logs, or error responses.
+- v1.5.2 safety policy continues to evaluate normalized text content.
+
 ## [1.6.0] - 2026-06-13
 
 ### Added

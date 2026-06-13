@@ -3092,7 +3092,14 @@
           },
           "messages": {
             "items": {
-              "$ref": "#/components/schemas/ChatMessage"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/IncomingChatMessage"
+                },
+                {
+                  "$ref": "#/components/schemas/ChatMessage"
+                }
+              ]
             },
             "type": "array",
             "minItems": 1,
@@ -3202,6 +3209,56 @@
             ],
             "title": "Tool Choice"
           },
+          "parallel_tool_calls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parallel Tool Calls"
+          },
+          "response_format": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Format"
+          },
+          "functions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Functions"
+          },
+          "function_call": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Function Call"
+          },
           "search": {
             "type": "string",
             "title": "Search",
@@ -3215,6 +3272,12 @@
               {
                 "items": {
                   "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "type": "object"
                 },
                 "type": "array"
               }
@@ -3288,6 +3351,31 @@
             "type": "string",
             "title": "Conversation Summary Mode",
             "default": "auto"
+          },
+          "tools_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Tools Mode",
+            "default": "auto"
+          },
+          "client_tools_compat": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientToolsCompatInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -3478,6 +3566,40 @@
         "type": "object",
         "title": "ClearConversationRequest"
       },
+      "ClientToolsCompatInfo": {
+        "properties": {
+          "client_tools_count": {
+            "type": "integer",
+            "title": "Client Tools Count",
+            "default": 0
+          },
+          "client_tool_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Client Tool Names"
+          },
+          "client_tool_choice_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Tool Choice Mode"
+          },
+          "client_tools_ignored": {
+            "type": "boolean",
+            "title": "Client Tools Ignored",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ClientToolsCompatInfo"
+      },
       "ConversationInfo": {
         "properties": {
           "id": {
@@ -3551,6 +3673,49 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "IncomingChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "system",
+              "user",
+              "assistant",
+              "tool"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OpenAIContentPart"
+                    },
+                    {
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "IncomingChatMessage"
       },
       "InternalApiKeyCreateRequest": {
         "properties": {
@@ -4206,6 +4371,30 @@
         ],
         "title": "ModelOverridePatchRequest"
       },
+      "OpenAIContentPart": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "OpenAIContentPart"
+      },
       "OrchestrationInfo": {
         "properties": {
           "enabled": {
@@ -4529,6 +4718,53 @@
               }
             ],
             "title": "Clarification Reason"
+          },
+          "client_tools_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Tools Count"
+          },
+          "client_tool_names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Tool Names"
+          },
+          "client_tool_choice_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Tool Choice Mode"
+          },
+          "client_tools_ignored": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Tools Ignored"
           }
         },
         "type": "object",

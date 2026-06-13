@@ -230,3 +230,28 @@ def validation_error_param(errors: list[dict[str, Any]]) -> str | None:
         return None
     tail = loc[-1]
     return str(tail) if tail is not None else None
+
+
+def sanitize_validation_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return safe validation error summaries without raw request payloads."""
+    sanitized: list[dict[str, Any]] = []
+    for err in errors:
+        entry: dict[str, Any] = {}
+        if err.get("type") is not None:
+            entry["type"] = err.get("type")
+        if err.get("loc") is not None:
+            entry["loc"] = err.get("loc")
+        if err.get("msg") is not None:
+            entry["msg"] = err.get("msg")
+        ctx = err.get("ctx")
+        if isinstance(ctx, dict):
+            safe_ctx: dict[str, Any] = {}
+            for key, value in ctx.items():
+                if isinstance(value, Exception):
+                    safe_ctx[key] = str(value)
+                elif isinstance(value, (str, int, float, bool)) and len(str(value)) <= 256:
+                    safe_ctx[key] = value
+            if safe_ctx:
+                entry["ctx"] = safe_ctx
+        sanitized.append(entry)
+    return sanitized

@@ -97,10 +97,9 @@ def resolve_internal_admin_token(settings: Any) -> InternalAdminTokenBootstrapRe
         )
         if print_flag:
             logger.warning(
-                "Generated internal admin token saved to %s. Copy it now; it will not be printed again.",
+                "Generated internal admin token saved to %s. Token prints at startup when NESTY_PRINT_BOOTSTRAP_ADMIN_TOKEN=true.",
                 file_path,
             )
-            print(f"NESTY_INTERNAL_ADMIN_TOKEN={generated_token}")
         else:
             logger.warning(
                 "Generated internal admin token and saved to %s. Set NESTY_PRINT_BOOTSTRAP_ADMIN_TOKEN=true to print once.",
@@ -120,12 +119,48 @@ def resolve_internal_admin_token(settings: Any) -> InternalAdminTokenBootstrapRe
         "It changes on restart; use env or file mode for personal self-host production."
     )
     if print_flag:
-        print(f"NESTY_INTERNAL_ADMIN_TOKEN={generated_token}")
+        logger.warning(
+            "Ephemeral internal admin token ready. Token prints at startup when NESTY_PRINT_BOOTSTRAP_ADMIN_TOKEN=true."
+        )
     return InternalAdminTokenBootstrapResult(
         token=generated_token,
         source="ephemeral",
         generated=True,
     )
+
+
+def print_internal_admin_token_startup_banner(settings: Any) -> None:
+    """Print internal admin token at Gateway startup (lifespan), next to ephemeral Console API key."""
+    if not bool(getattr(settings, "nesty_print_bootstrap_admin_token", False)):
+        return
+    if not bool(getattr(settings, "internal_admin_enabled", False)):
+        logger.warning(
+            "NESTY_PRINT_BOOTSTRAP_ADMIN_TOKEN=true but INTERNAL_ADMIN_ENABLED=false; "
+            "internal admin token banner skipped."
+        )
+        return
+
+    token = getattr(settings, "nesty_internal_admin_token", None)
+    if token is None or not str(token).strip():
+        logger.warning(
+            "NESTY_PRINT_BOOTSTRAP_ADMIN_TOKEN=true but no internal admin token is configured. "
+            "Use NESTY_INTERNAL_ADMIN_TOKEN_MODE=ephemeral (or file) and leave NESTY_INTERNAL_ADMIN_TOKEN unset."
+        )
+        return
+
+    mode = str(getattr(settings, "nesty_internal_admin_token_mode", "env") or "env").strip().lower()
+    env_override = os.getenv("NESTY_INTERNAL_ADMIN_TOKEN")
+    if mode == "env" and env_override is not None and str(env_override).strip():
+        return
+
+    print("=" * 88, flush=True)
+    print(
+        "EPHEMERAL NESTY INTERNAL ADMIN TOKEN - copy into Nesty Console "
+        "(NESTY_INTERNAL_ADMIN_TOKEN). Rotates on restart when MODE=ephemeral.",
+        flush=True,
+    )
+    print(str(token).strip(), flush=True)
+    print("=" * 88, flush=True)
 
 
 def admin_token_status(settings: Any) -> dict[str, str | bool | None]:

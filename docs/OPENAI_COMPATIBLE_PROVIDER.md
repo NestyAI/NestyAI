@@ -166,7 +166,51 @@ const completion = await client.chat.completions.create({
 });
 ```
 
-Harmless OpenAI request fields (`user`, `top_p`, `stop`, `metadata`, etc.) are accepted and ignored when not supported. Nesty-specific optional fields (`search`, `tools`, `store`, `semantic_recall`, `conversation_id`) remain available but are not required.
+Harmless OpenAI request fields (`user`, `top_p`, `stop`, `metadata`, `tool_choice`, `parallel_tool_calls`, `response_format`, etc.) are accepted and ignored when not supported. Nesty-specific optional fields (`search`, `tools`, `store`, `semantic_recall`, `conversation_id`) remain available but are not required.
+
+### Cursor and OpenAI SDK message content (v1.6.1+)
+
+Some clients (including **Cursor**) send multipart message content:
+
+```json
+{
+  "role": "user",
+  "content": [
+    {"type": "text", "text": "Explain this function: "},
+    {"type": "text", "text": "def add(a, b): return a + b"}
+  ]
+}
+```
+
+Gateway accepts this shape and normalizes it to a single string before safety guards and provider calls. Unsupported part types (`image_url`, `file`, `input_audio`, etc.) are not executed; they become safe placeholders only.
+
+### OpenAI function tools vs Nesty tools (v1.6.1+)
+
+OpenAI-compatible clients may send IDE agent tool definitions:
+
+```json
+{
+  "tools": [
+    {
+      "type": "function",
+      "function": {"name": "grep", "description": "...", "parameters": {...}}
+    }
+  ],
+  "tool_choice": "auto"
+}
+```
+
+These are **accepted for compatibility** so clients do not receive HTTP 400 schema errors. Gateway **does not execute** client-provided tools and **does not pass** tool schemas to upstream providers.
+
+Nesty gateway tools remain separate:
+
+| Field | Meaning |
+|-------|---------|
+| `"tools": "auto"` | Gateway planner may run built-in tools (calculator, web search, etc.) |
+| `"tools": "off"` | No Gateway tools |
+| `"tools": ["calculator"]` | Explicit Gateway tool list |
+
+When OpenAI function tools are detected, Gateway internally uses `"auto"` for Nesty tools and records safe metadata on `planner.client_tools_*` fields.
 
 ---
 

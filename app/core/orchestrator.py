@@ -861,7 +861,7 @@ class ChatOrchestrator:
                 message="Semantic recall mode must be one of: auto, off, on.",
                 status_code=400,
             )
-        return self._normalize_tools_mode(request.tools)
+        return self._normalize_tools_mode(request.tools_mode)
 
     async def _prepare_chat_context(
         self,
@@ -1091,6 +1091,7 @@ class ChatOrchestrator:
             clarification_needed=bool(tool_plan.clarification_needed),
             clarification_reason=tool_plan.clarification_reason,
         )
+        planner_info = self._apply_client_tools_compat(planner_info, request)
 
         search_sources, search_used_tools, search_context_items, search_used = await self._maybe_apply_search_context(
             request=request,
@@ -1150,6 +1151,20 @@ class ChatOrchestrator:
         )
 
         return messages, input_guard_info, tools_meta, sources, semantic_recall_info, retrieval_info, planner_info
+
+    @staticmethod
+    def _apply_client_tools_compat(planner_info: PlannerInfo, request: ChatCompletionRequest) -> PlannerInfo:
+        compat = request.client_tools_compat
+        if compat is None:
+            return planner_info
+        return planner_info.model_copy(
+            update={
+                "client_tools_count": compat.client_tools_count,
+                "client_tool_names": list(compat.client_tool_names),
+                "client_tool_choice_mode": compat.client_tool_choice_mode,
+                "client_tools_ignored": compat.client_tools_ignored,
+            }
+        )
 
     def _normalize_tools_mode(self, tools_field: str | list[str]) -> str | list[str]:
         if isinstance(tools_field, str):

@@ -113,10 +113,16 @@ Public endpoints represent the core API interface intended for clients (e.g., CL
     ```
     *   **Allowed Values**:
         *   `search`: `"auto"`, `"on"`, `"off"`
-        *   `tools`: `"auto"`, `"off"`, or `list[str]` (e.g. `["current_datetime", "web_search"]`)
+        *   `tools`: `"auto"`, `"off"`, or `list[str]` (e.g. `["current_datetime", "web_search"]`) — **Nesty gateway tool modes**
         *   `orchestration`: `"auto"`, `"off"`, `"force"`
         *   `semantic_recall`: `"auto"`, `"on"`, `"off"`
         *   `summary`: `"auto"`, `"off"`, `"force"`
+    *   **OpenAI SDK compatibility (v1.6.1+)**:
+        *   `messages[].content` accepts a **string** or an array of text parts: `[{"type": "text", "text": "..."}]`. Content parts are normalized to string before guards and providers.
+        *   Unsupported multimodal parts (`image_url`, `input_audio`, `file`, etc.) are replaced with safe placeholders; Gateway does not fetch URLs or decode binary content.
+        *   OpenAI-style `tools: [{"type": "function", "function": {...}}]` arrays are **accepted for compatibility** (e.g. Cursor IDE) but **not executed**. Gateway continues to use its own deterministic tool planner (`tools: "auto" | "off" | list[str]`).
+        *   Harmless OpenAI passthrough fields are accepted and ignored at runtime: `tool_choice`, `parallel_tool_calls`, `response_format`, legacy `functions` / `function_call`.
+        *   Client tool metadata (when OpenAI tools are present) appears additively on `planner`: `client_tools_count`, `client_tool_names`, `client_tool_choice_mode`, `client_tools_ignored`.
 *   **Response (400 Bad Request) — Safety policy (v1.5.2+)**:
     Returned before provider/search/tool calls when `NESTY_SAFETY_POLICY_MODE=enforce` and input matches high-confidence unsafe patterns.
     ```json

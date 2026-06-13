@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -21,7 +22,8 @@ from app.api.internal_console_runtime import router as internal_console_runtime_
 from app.api.internal_model_configs import router as internal_model_configs_router
 from app.api.models import router as models_router
 from app.config import Settings
-from app.core.errors import APIError, build_error_response, validation_error_param
+from app.core.errors import APIError, build_error_response, sanitize_validation_errors, validation_error_param
+from app.core.bootstrap.internal_admin_token import print_internal_admin_token_startup_banner
 from app.core.bootstrap.bootstrap_credentials import resolve_bootstrap_credentials
 from app.core.ephemeral_console_key import rotate_ephemeral_console_api_key_from_env
 from app.core.http_client import close_shared_async_client
@@ -75,6 +77,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             rotate_ephemeral_console_api_key_from_env(settings=app_settings)
         except Exception:
             logger.exception("ephemeral_console_key_rotation_unhandled_error")
+        try:
+            print_internal_admin_token_startup_banner(app_settings)
+        except Exception:
+            logger.exception("internal_admin_token_startup_banner_error")
         try:
             yield
         finally:
@@ -144,24 +150,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(status_code=exc.status_code, content=payload, headers=exc.headers)
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
-        sanitized_errors = []
-        for err in exc.errors():
-            sanitized_err = dict(err)
-            if "ctx" in sanitized_err and isinstance(sanitized_err["ctx"], dict):
-                sanitized_ctx = {}
-                for k, v in sanitized_err["ctx"].items():
-                    if isinstance(v, Exception):
-                        sanitized_ctx[k] = str(v)
-                    else:
-                        sanitized_ctx[k] = v
-                sanitized_err["ctx"] = sanitized_ctx
-            sanitized_errors.append(sanitized_err)
-
+    async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        sanitized_errors = sanitize_validation_errors([dict(err) for err in exc.errors()])
+        details: dict[str, Any] = {"errors": sanitized_errors}
+        request_id = getattr(request.state, "request_id", None)
+        if request_id:
+            details["request_id"] = request_id
         payload = build_error_response(
             code="invalid_request",
             message="Invalid request payload.",
-            details={"errors": sanitized_errors},
+            details=details,
             param=validation_error_param(sanitized_errors),
             status_code=400,
         )

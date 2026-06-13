@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.openai_compat import (
+    ClientToolsCompatInfo,
+    IncomingChatMessage,
+    normalize_messages,
+    resolve_tools_mode,
+)
 from app.schemas.tools import SourceItem, ToolMetadata
 
 
@@ -16,7 +22,7 @@ class ChatCompletionRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     model: str
-    messages: list[ChatMessage] = Field(min_length=1)
+    messages: list[IncomingChatMessage | ChatMessage] = Field(min_length=1)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, gt=0)
     stream: bool = False
@@ -27,8 +33,12 @@ class ChatCompletionRequest(BaseModel):
     user: str | None = None
     metadata: dict[str, Any] | None = None
     tool_choice: str | dict[str, Any] | None = None
+    parallel_tool_calls: bool | None = None
+    response_format: dict[str, Any] | None = None
+    functions: list[dict[str, Any]] | None = None
+    function_call: str | dict[str, Any] | None = None
     search: str = "auto"
-    tools: str | list[str] = "auto"
+    tools: str | list[str] | list[dict[str, Any]] = "auto"
     orchestration: str = "auto"
     semantic_recall: str = "auto"
     conversation_id: str | None = None
@@ -40,6 +50,24 @@ class ChatCompletionRequest(BaseModel):
     conversation_summary_used: bool = Field(default=False, exclude=True)
     conversation_summary_updated: bool = Field(default=False, exclude=True)
     conversation_summary_mode: str = Field(default="auto", exclude=True)
+    tools_mode: str | list[str] = Field(default="auto", exclude=True)
+    client_tools_compat: ClientToolsCompatInfo | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def normalize_openai_compat(self) -> ChatCompletionRequest:
+        pairs, _warnings = normalize_messages(list(self.messages))
+        if not pairs:
+            raise ValueError("messages must contain at least one valid message")
+        normalized_messages = [
+            ChatMessage(role=role, content=content)  # type: ignore[arg-type]
+            for role, content in pairs
+        ]
+        tools_mode, client_compat = resolve_tools_mode(self.tools, self.tool_choice)
+        object.__setattr__(self, "messages", normalized_messages)
+        object.__setattr__(self, "tools_mode", tools_mode)
+        object.__setattr__(self, "tools", tools_mode)
+        object.__setattr__(self, "client_tools_compat", client_compat)
+        return self
 
 
 class ChatChoice(BaseModel):
@@ -165,6 +193,10 @@ class PlannerInfo(BaseModel):
     tool_reason: str | None = None
     clarification_needed: bool = False
     clarification_reason: str | None = None
+    client_tools_count: int | None = None
+    client_tool_names: list[str] | None = None
+    client_tool_choice_mode: str | None = None
+    client_tools_ignored: bool | None = None
 
 
 class RetrievalInfo(BaseModel):
