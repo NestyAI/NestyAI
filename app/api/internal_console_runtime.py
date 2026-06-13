@@ -10,8 +10,10 @@ from app.core.model_config_loader import (
     get_default_model_config,
     get_effective_model_config,
     list_effective_model_configs,
+    merge_orchestration_roles_override,
     validate_model_config_override,
 )
+from app.core.orchestration_roles import build_orchestration_console_view, collect_orchestration_credential_warnings
 from app.core.runtime_gateway_state import (
     get_runtime_gateway_state,
     record_runtime_config_audit,
@@ -43,6 +45,11 @@ class RuntimeModelConfigUpdateRequest(BaseModel):
 
 class RuntimeProviderChainUpdateRequest(BaseModel):
     provider_chain: list[dict[str, Any]]
+    changed_by_label: str | None = Field(default="internal-console", max_length=120)
+
+
+class RuntimeOrchestrationPatchRequest(BaseModel):
+    roles: dict[str, dict[str, Any]] = Field(default_factory=dict)
     changed_by_label: str | None = Field(default="internal-console", max_length=120)
 
 
@@ -223,6 +230,85 @@ async def runtime_reset_model_config(
         config_area="model_config",
         changed_fields=changed_fields,
         extra={"model_id": model_id, "config_source": "default"},
+    )
+
+
+@router.get("/model-configs/{model_id}/orchestration")
+async def runtime_get_orchestration_config(model_id: str, request: Request) -> dict[str, Any]:
+    view = build_orchestration_console_view(model_id)
+    if view is None:
+        raise APIError(
+            code="model_config_not_found",
+            message="Model config not found.",
+            status_code=404,
+        )
+    settings = get_settings()
+    validation_warnings = collect_orchestration_credential_warnings(settings)
+    return _safe_response(
+        request,
+        ok=True,
+        config_area="orchestration_roles",
+        changed_fields=[],
+        validation_warnings=validation_warnings,
+        extra=view,
+    )
+
+
+@router.patch("/model-configs/{model_id}/orchestration")
+async def runtime_patch_orchestration_config(
+    model_id: str,
+    body: RuntimeOrchestrationPatchRequest,
+    request: Request,
+) -> dict[str, Any]:
+    if get_default_model_config(model_id) is None:
+        raise APIError(
+            code="model_config_not_found",
+            message="Model config not found.",
+            status_code=404,
+        )
+    if not isinstance(body.roles, dict) or not body.roles:
+        raise APIError(
+            code="model_config_invalid",
+            message="orchestration roles patch must include at least one role entry.",
+            status_code=400,
+        )
+    existing_override = get_model_override(model_id)
+    existing_config = existing_override.get("config") if isinstance(existing_override, dict) else None
+    override = merge_orchestration_roles_override(existing_config, body.roles)
+    valid, error = validate_model_config_override(model_id, override)
+    if not valid:
+        raise APIError(
+            code="model_config_invalid",
+            message=error or "Invalid orchestration roles override.",
+            status_code=400,
+        )
+    merged_override: dict[str, Any] = dict(existing_config) if isinstance(existing_config, dict) else {}
+    merged_override.update(override)
+    upsert_model_override(
+        model_id=model_id,
+        config=merged_override,
+        changed_by_api_key_id=None,
+        changed_by_label=body.changed_by_label or "internal-console",
+    )
+    clear_runtime_model_config_caches()
+    changed_fields = sorted(f"orchestration_roles.{role_id}" for role_id in body.roles.keys())
+    record_runtime_config_audit(
+        config_area="orchestration_roles",
+        action="update",
+        changed_fields=changed_fields,
+        actor_type="internal_console",
+        console_id=_console_id(request),
+        validation_result="ok",
+    )
+    view = build_orchestration_console_view(model_id) or {}
+    validation_warnings = collect_orchestration_credential_warnings(get_settings())
+    return _safe_response(
+        request,
+        ok=True,
+        config_area="orchestration_roles",
+        changed_fields=changed_fields,
+        validation_warnings=validation_warnings,
+        extra=view,
     )
 
 

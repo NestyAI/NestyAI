@@ -22,6 +22,11 @@ _SAFE_METADATA_KEYS = {
     "api_key_mode",
     "api_key_env_name",
     "api_key_secret_ref",
+    "max_tokens",
+    "default_max_tokens",
+    "timeout_seconds",
+    "client_tools_count",
+    "client_tool_choice_mode",
 }
 
 

@@ -8,6 +8,17 @@ from app.utils.logging import get_logger, log_safe
 
 
 from app.core.runtime_providers.validation import get_supported_chat_provider_ids
+from app.core.orchestration_roles import (
+    REQUIRED_ORCHESTRATION_ROLE_IDS,
+    ROLE_CONFIG_FIELDS,
+    SUPPORTED_ORCHESTRATION_ROLE_IDS,
+    TEMPERATURE_MAX,
+    TEMPERATURE_MIN,
+    TIMEOUT_SECONDS_MAX,
+    TIMEOUT_SECONDS_MIN,
+    MAX_TOKENS_MAX,
+    MAX_TOKENS_MIN,
+)
 ALLOWED_OVERRIDE_FIELDS = {
     "display_name",
     "behavior_profile",
@@ -78,16 +89,9 @@ def validate_model_config_override(model_id: str, override_config: dict[str, Any
             return False, error
 
     if "orchestration_roles" in override_config:
-        roles = override_config.get("orchestration_roles")
-        if not isinstance(roles, dict):
-            return False, "model_config_invalid: orchestration_roles must be an object"
-        for role_name, role_cfg in roles.items():
-            if not isinstance(role_cfg, dict):
-                return False, f"model_config_invalid: orchestration role '{role_name}' must be an object"
-            if "provider_chain" in role_cfg:
-                ok, error = _validate_provider_chain(role_cfg.get("provider_chain"))
-                if not ok:
-                    return False, error
+        ok, error = _validate_orchestration_roles(override_config.get("orchestration_roles"))
+        if not ok:
+            return False, error
 
     for number_field in ["default_temperature", "default_max_tokens", "max_tool_calls", "max_search_results"]:
         if number_field not in override_config:
@@ -155,6 +159,76 @@ def list_effective_model_configs() -> list[dict[str, Any]]:
             }
         )
     return items
+
+
+def _validate_orchestration_roles(roles: Any) -> tuple[bool, str | None]:
+    if not isinstance(roles, dict):
+        return False, "model_config_invalid: orchestration_roles must be an object"
+    for role_name, role_cfg in roles.items():
+        role_id = str(role_name or "").strip()
+        if role_id not in SUPPORTED_ORCHESTRATION_ROLE_IDS:
+            return False, f"model_config_invalid: invalid orchestration role '{role_id}'"
+        if not isinstance(role_cfg, dict):
+            return False, f"model_config_invalid: orchestration role '{role_id}' must be an object"
+        unknown_fields = set(role_cfg.keys()) - ROLE_CONFIG_FIELDS
+        if unknown_fields:
+            unknown = sorted(str(item) for item in unknown_fields)
+            return False, f"model_config_invalid: orchestration role '{role_id}' has unknown fields: {', '.join(unknown)}"
+        enabled = role_cfg.get("enabled", True)
+        if enabled is False and role_id in REQUIRED_ORCHESTRATION_ROLE_IDS:
+            return False, f"model_config_invalid: required orchestration role '{role_id}' cannot be disabled"
+        if "provider_chain" in role_cfg:
+            chain = role_cfg.get("provider_chain")
+            if chain is not None:
+                if not isinstance(chain, list) or not chain:
+                    return False, f"model_config_invalid: orchestration role '{role_id}' provider_chain must be a non-empty array"
+                ok, error = _validate_provider_chain(chain)
+                if not ok:
+                    return False, error
+        if "temperature" in role_cfg:
+            value = role_cfg.get("temperature")
+            if value is not None:
+                if not isinstance(value, (int, float)):
+                    return False, f"model_config_invalid: orchestration role '{role_id}' temperature must be numeric"
+                if not (TEMPERATURE_MIN <= float(value) <= TEMPERATURE_MAX):
+                    return False, f"model_config_invalid: orchestration role '{role_id}' temperature out of range"
+        if "max_tokens" in role_cfg:
+            value = role_cfg.get("max_tokens")
+            if value is not None:
+                if not isinstance(value, int):
+                    return False, f"model_config_invalid: orchestration role '{role_id}' max_tokens must be an integer"
+                if not (MAX_TOKENS_MIN <= int(value) <= MAX_TOKENS_MAX):
+                    return False, f"model_config_invalid: orchestration role '{role_id}' max_tokens out of range"
+        if "timeout_seconds" in role_cfg:
+            value = role_cfg.get("timeout_seconds")
+            if value is not None:
+                if not isinstance(value, (int, float)):
+                    return False, f"model_config_invalid: orchestration role '{role_id}' timeout_seconds must be numeric"
+                if not (TIMEOUT_SECONDS_MIN <= float(value) <= TIMEOUT_SECONDS_MAX):
+                    return False, f"model_config_invalid: orchestration role '{role_id}' timeout_seconds out of range"
+    return True, None
+
+
+def validate_orchestration_roles_patch(roles: Any) -> tuple[bool, str | None]:
+    return _validate_orchestration_roles(roles)
+
+
+def merge_orchestration_roles_override(
+    existing_override: dict[str, Any] | None,
+    roles_patch: dict[str, Any],
+) -> dict[str, Any]:
+    merged_roles: dict[str, Any] = {}
+    if isinstance(existing_override, dict):
+        existing_roles = existing_override.get("orchestration_roles")
+        if isinstance(existing_roles, dict):
+            merged_roles = {str(key): dict(value) for key, value in existing_roles.items() if isinstance(value, dict)}
+    for role_id, role_cfg in roles_patch.items():
+        if not isinstance(role_cfg, dict):
+            continue
+        current = dict(merged_roles.get(str(role_id), {}))
+        current.update(role_cfg)
+        merged_roles[str(role_id)] = current
+    return {"orchestration_roles": merged_roles}
 
 
 def _validate_provider_chain(provider_chain: Any) -> tuple[bool, str | None]:

@@ -318,7 +318,11 @@ class ProviderTarget(BaseModel):
 
 
 class OrchestrationRoleConfig(BaseModel):
+    enabled: bool = True
     provider_chain: list[ProviderTarget] = Field(default_factory=list)
+    temperature: float | None = None
+    max_tokens: int | None = None
+    timeout_seconds: float | None = None
 
 
 class ModelProfile(BaseModel):

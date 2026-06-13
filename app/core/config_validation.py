@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import Settings, load_models_config
+from app.core.orchestration_roles import REQUIRED_ORCHESTRATION_ROLE_IDS, SUPPORTED_ORCHESTRATION_ROLE_IDS
 from app.core.runtime_providers.validation import get_supported_chat_provider_ids
 from app.providers.constants import BUILTIN_PROVIDER_IDS
 from app.storage.db import init_db
@@ -156,6 +157,19 @@ def validate_model_chains(project_root: Path | None = None) -> list[dict[str, An
 
             # Check orchestration roles
             for role_name, role_cfg in profile.orchestration_roles.items():
+                if role_name not in SUPPORTED_ORCHESTRATION_ROLE_IDS:
+                    results.append({
+                        "name": f"model_chain_{model_id}_{role_name}_role_id",
+                        "status": "FAIL",
+                        "message": f"Unsupported orchestration role '{role_name}' for model alias '{model_id}'.",
+                    })
+                    continue
+                if not role_cfg.enabled and role_name in REQUIRED_ORCHESTRATION_ROLE_IDS:
+                    results.append({
+                        "name": f"model_chain_{model_id}_{role_name}_disabled",
+                        "status": "FAIL",
+                        "message": f"Required orchestration role '{role_name}' is disabled for model alias '{model_id}'.",
+                    })
                 for idx, target in enumerate(role_cfg.provider_chain):
                     provider_name = str(target.provider or "").strip()
                     if provider_name not in supported_providers:

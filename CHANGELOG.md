@@ -7,6 +7,22 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.6.2] - 2026-06-13
+
+### Added
+- Configurable Pro orchestration role settings on `orchestration_roles`: `enabled`, `temperature`, `max_tokens`, `timeout_seconds` (flat schema preserved).
+- Central role resolution in `app/core/orchestration_roles.py` with supported roles: `planner`, `researcher`, `critic`, `finalizer`.
+- Console orchestration endpoints: `GET/PATCH /internal/console/runtime/model-configs/{model_id}/orchestration` for safe ROLE-row editing.
+- Doctor WARN (not fail) when orchestration role primary providers lack configured credentials.
+
+### Changed
+- Pro orchestration executes per-role provider chain, temperature, max tokens, and timeout with v1.6.1 fallbacks when fields are unset.
+- Optional roles (`researcher`, `critic`) can be disabled; required roles (`planner`, `finalizer`) cannot be disabled via config validation.
+- Role config validation rejects unknown role IDs, out-of-range values, and secret-like strings.
+
+### Security
+- Orchestration internal APIs expose safe config fields only; role prompts and intermediate answers are never returned.
+
 ## [1.6.1] - 2026-06-13
 
 ### Added

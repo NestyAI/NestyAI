@@ -15,6 +15,7 @@ from app.core.config_validation import (
     validate_env_safety,
     validate_runtime_setup,
 )
+from app.core.orchestration_roles import validate_orchestration_role_credentials
 
 # Color ANSI escapes
 GREEN = "\033[92m"
@@ -85,6 +86,11 @@ def main() -> int:
     model_checks = validate_model_chains(ROOT)
     for check in model_checks:
         print(f"  {format_status(check['status'])} {check['message']}")
+
+    orchestration_checks = validate_orchestration_role_credentials()
+    for check in orchestration_checks:
+        print(f"  {format_status(check['status'])} {check['message']}")
+    model_checks = model_checks + orchestration_checks
 
     # 5. Environment & Security Config
     print("\n4. Security & Environment Configuration Check:")

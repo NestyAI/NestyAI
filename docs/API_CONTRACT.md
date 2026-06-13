@@ -541,6 +541,8 @@ Endpoints:
 *   `POST /internal/console/runtime/validate`: Dry-run validate override payload
 *   `POST /internal/console/runtime/model-configs/{model_id}`: Apply runtime override
 *   `POST /internal/console/runtime/model-configs/{model_id}/reset`: Reset override
+*   `GET /internal/console/runtime/model-configs/{model_id}/orchestration`: Safe Pro orchestration role config (v1.6.2+)
+*   `PATCH /internal/console/runtime/model-configs/{model_id}/orchestration`: Patch `orchestration_roles` only (v1.6.2+)
 *   `POST /internal/console/runtime/provider-chain/{model_id}`: Update `provider_chain` only
 *   `GET /internal/console/runtime/providers`: List built-in + runtime provider capabilities
 *   `POST /internal/console/runtime/providers/openai-compatible`: Register a runtime OpenAI-compatible provider

@@ -2863,6 +2863,100 @@
         }
       }
     },
+    "/internal/console/runtime/model-configs/{model_id}/orchestration": {
+      "get": {
+        "tags": [
+          "internal-console-runtime"
+        ],
+        "summary": "Runtime Get Orchestration Config",
+        "operationId": "runtime_get_orchestration_config_internal_console_runtime_model_configs__model_id__orchestration_get",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Runtime Get Orchestration Config Internal Console Runtime Model Configs  Model Id  Orchestration Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "internal-console-runtime"
+        ],
+        "summary": "Runtime Patch Orchestration Config",
+        "operationId": "runtime_patch_orchestration_config_internal_console_runtime_model_configs__model_id__orchestration_patch",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeOrchestrationPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Runtime Patch Orchestration Config Internal Console Runtime Model Configs  Model Id  Orchestration Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/internal/console/runtime/provider-chain/{model_id}": {
       "post": {
         "tags": [
@@ -5340,6 +5434,32 @@
         },
         "type": "object",
         "title": "RuntimeOpenAIProviderUpdateRequest"
+      },
+      "RuntimeOrchestrationPatchRequest": {
+        "properties": {
+          "roles": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Roles"
+          },
+          "changed_by_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed By Label",
+            "default": "internal-console"
+          }
+        },
+        "type": "object",
+        "title": "RuntimeOrchestrationPatchRequest"
       },
       "RuntimeProviderChainUpdateRequest": {
         "properties": {

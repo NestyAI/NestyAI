@@ -8,6 +8,13 @@ from typing import Any
 
 from app.config import ModelProfile
 from app.core.internal_tool_markup import sanitize_internal_tool_markup
+from app.core.orchestration_roles import (
+    SUPPORTED_ORCHESTRATION_ROLE_IDS,
+    TIMEOUT_SECONDS_MIN,
+    resolve_effective_role_config,
+    role_is_enabled,
+    select_roles_for_run,
+)
 from app.schemas.chat import ChatMessage
 from app.schemas.provider import ProviderUsage
 
@@ -138,6 +145,11 @@ def should_use_orchestration(
         decision["reason"] = "missing_roles"
         return decision
 
+    for required_role in ("planner", "finalizer"):
+        if required_role not in roles_cfg or not role_is_enabled(roles_cfg.get(required_role)):
+            decision["reason"] = "required_role_disabled"
+            return decision
+
     user_message = str((context_metadata or {}).get("latest_user_message") or "")
     complexity_score = _compute_complexity_score(
         user_message=user_message,
@@ -156,7 +168,7 @@ def should_use_orchestration(
         decision["reason"] = "simple_request"
         return decision
 
-    roles = _select_roles_for_run(
+    roles = select_roles_for_run(
         roles_cfg=roles_cfg,
         complexity_score=complexity_score,
         complexity_threshold=threshold,
@@ -242,16 +254,13 @@ def _select_roles_for_run(
     complexity_threshold: int,
     max_internal_calls: int,
 ) -> list[str]:
-    available = [role for role in ["planner", "researcher", "critic", "finalizer"] if role in roles_cfg]
-    if "planner" not in available or "finalizer" not in available:
-        return []
-
-    high_complexity = complexity_score >= (complexity_threshold + 2)
-    if high_complexity and max_internal_calls >= 4 and {"planner", "researcher", "critic", "finalizer"}.issubset(set(available)):
-        return ["planner", "researcher", "critic", "finalizer"]
-
-    # Reduced flow for moderate complexity and/or strict cost budget.
-    return ["planner", "finalizer"][:max_internal_calls]
+    """Backward-compatible alias for tests importing private helper."""
+    return select_roles_for_run(
+        roles_cfg=roles_cfg,
+        complexity_score=complexity_score,
+        complexity_threshold=complexity_threshold,
+        max_internal_calls=max_internal_calls,
+    )
 
 
 class NestyProMultiModelOrchestrator:
@@ -291,11 +300,16 @@ class NestyProMultiModelOrchestrator:
         )
 
         for role in selected_roles:
-            role_cfg = roles_cfg.get(role)
-            if role_cfg is None or not role_cfg.provider_chain:
-                provider_chain = model_profile.provider_chain
-            else:
-                provider_chain = role_cfg.provider_chain
+            raw_role_cfg = roles_cfg.get(role)
+            resolved = resolve_effective_role_config(
+                role_id=role,
+                role_cfg=raw_role_cfg,
+                model_profile=model_profile,
+                request_temperature=temperature,
+                request_max_tokens=max_tokens,
+                global_timeout_seconds=role_timeout_seconds,
+            )
+            provider_chain = resolved.provider_chain
             if not provider_chain:
                 raise MultiModelOrchestrationError("missing_provider_chain")
 
@@ -306,7 +320,6 @@ class NestyProMultiModelOrchestrator:
                 outputs=outputs,
                 context_metadata=context_metadata,
             )
-            role_max_tokens = self._role_max_tokens(role=role, max_tokens=max_tokens)
             start = time.perf_counter()
             try:
                 route = await asyncio.wait_for(
@@ -314,11 +327,11 @@ class NestyProMultiModelOrchestrator:
                         request_id=f"{request_id}:{role}",
                         provider_chain=provider_chain,
                         messages=role_messages,
-                        temperature=temperature,
-                        max_tokens=role_max_tokens,
+                        temperature=resolved.temperature,
+                        max_tokens=resolved.max_tokens,
                         trace_label=f"{model_alias}:{role}",
                     ),
-                    timeout=max(1.0, float(role_timeout_seconds)),
+                    timeout=max(TIMEOUT_SECONDS_MIN, float(resolved.timeout_seconds)),
                 )
             except TimeoutError as exc:
                 latency = int((time.perf_counter() - start) * 1000)

@@ -48,6 +48,38 @@ Console secret bootstrap modes mirror admin token (`env`, `file`, `ephemeral`). 
 | Runtime provider test | `POST .../providers/{id}/test` | Live connectivity test with SSRF-safe URL checks |
 | Validate | `POST .../validate` | Dry-run; no apply |
 | Reload | `POST .../reload` | Clears runtime caches |
+| Orchestration roles (v1.6.2) | `GET/PATCH .../model-configs/{model_id}/orchestration` | Safe ROLE-row config for Pro (`planner`, `researcher`, `critic`, `finalizer`) |
+
+## Pro orchestration role config (v1.6.2)
+
+Supported on `nesty-pro-1.0` via flat `orchestration_roles` (unchanged storage shape):
+
+| Role | Required | Notes |
+|------|----------|-------|
+| `planner` | yes | Cannot be disabled |
+| `researcher` | no | Optional; skipped when disabled |
+| `critic` | no | Optional; skipped when disabled |
+| `finalizer` | yes | Cannot be disabled |
+
+Per-role fields: `enabled`, `provider_chain`, `temperature`, `max_tokens`, `timeout_seconds`.
+
+Console GET returns nested view `orchestration.roles` for UI convenience; YAML/runtime storage remains `orchestration_roles`.
+
+Role prompts and intermediate answers are never exposed via internal APIs.
+
+Example PATCH body:
+
+```json
+{
+  "roles": {
+    "finalizer": {
+      "temperature": 0.4,
+      "max_tokens": 1600,
+      "provider_chain": [{"provider": "groq", "model": "llama-3.3-70b-versatile"}]
+    }
+  }
+}
+```
 
 ## Provider expansion (v1.5.0)
 
