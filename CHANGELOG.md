@@ -7,6 +7,25 @@ Tracking rule:
 - Each version entry should describe user-visible capabilities and behavior in plain language.
 - Internal architecture notes and deep technical change logs belong in `AI.md`.
 
+## [1.6.3] - 2026-06-13
+
+### Added
+- Tool Intent Router v2 (`app/tools/intent_router.py`) separating intent classification, argument extraction, and eligibility checks.
+- Freshness/commodity intent detection for EN/VI current-price and news queries.
+- ISO vs provider-supported currency validation (`app/tools/validators/currency.py`).
+- Retrieval recovery fallback (`app/core/retrieval_recovery.py`) to run web search after ineligible/failed specialized tools without duplicate search when context already exists.
+- Safe planner/retrieval metadata: `tool_intent_confidence`, `retrieval_required`, `retrieval_fallback_used`, `fallback_from_tool`, `fallback_reason_code`.
+
+### Changed
+- `exchange_rate` requires explicit FX intent; rejects false positives from Vietnamese tokens (NAY/NAM/GIA/HOM/TAI).
+- Frankfurter is not called unless both currencies are provider-supported; ISO-valid but unsupported pairs return `unsupported_currency`.
+- Auto-mode tool failures inject compact `[Retrieval Notice]` context (no raw provider/search payloads).
+- Pro finalizer instructions avoid false “no internet” claims when retrieval context exists or failed.
+
+### Security
+- Pre-execution tool argument validation blocks invalid outbound provider calls.
+- Client OpenAI/Cursor tools remain ignored; no change to public response or SSE success shape.
+
 ## [1.6.2] - 2026-06-13
 
 ### Added

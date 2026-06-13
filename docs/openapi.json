@@ -4813,6 +4813,49 @@
             ],
             "title": "Clarification Reason"
           },
+          "tool_intent_confidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Intent Confidence"
+          },
+          "retrieval_required": {
+            "type": "boolean",
+            "title": "Retrieval Required",
+            "default": false
+          },
+          "retrieval_fallback_used": {
+            "type": "boolean",
+            "title": "Retrieval Fallback Used",
+            "default": false
+          },
+          "fallback_from_tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback From Tool"
+          },
+          "fallback_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Reason Code"
+          },
           "client_tools_count": {
             "anyOf": [
               {
@@ -5645,6 +5688,33 @@
               }
             ],
             "title": "Decision Reason"
+          },
+          "retrieval_fallback_used": {
+            "type": "boolean",
+            "title": "Retrieval Fallback Used",
+            "default": false
+          },
+          "fallback_from_tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback From Tool"
+          },
+          "fallback_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Reason Code"
           }
         },
         "type": "object",

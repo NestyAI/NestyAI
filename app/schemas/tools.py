@@ -35,6 +35,9 @@ class SearchToolMetadata(BaseModel):
     cache_hit: bool = False
     context_chars: int | None = None
     decision_reason: str | None = None
+    retrieval_fallback_used: bool = False
+    fallback_from_tool: str | None = None
+    fallback_reason_code: str | None = None
 
 
 class ToolMetadata(BaseModel):

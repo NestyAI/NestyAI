@@ -8,81 +8,53 @@ from urllib.parse import urlencode
 import httpx
 
 from app.schemas.tools import ToolResult
-
-
-_CURRENCY_PATTERN = re.compile(r"\b([A-Za-z]{3})\b")
-_AMOUNT_PATTERN = re.compile(r"(\d+(?:[.,]\d+)?)")
-
-
-def _normalize_amount(text: str) -> float | None:
-    cleaned = text.replace(",", "")
-    try:
-        return float(cleaned)
-    except ValueError:
-        return None
+from app.tools.validators.currency import (
+    ExchangeRequest,
+    extract_exchange_request_with_validation,
+    extract_validated_exchange_request,
+    validate_currency_pair_for_provider,
+)
 
 
 def extract_exchange_request(message: str) -> tuple[float, str, str] | None:
-    text = " ".join(message.strip().split())
-    if not text:
+    """Backward-compatible extractor; requires explicit FX intent and validated ISO/provider codes."""
+    parsed = extract_validated_exchange_request(message)
+    if parsed is None:
         return None
-
-    upper = text.upper()
-    currencies = _CURRENCY_PATTERN.findall(upper)
-    if len(currencies) < 2:
-        return None
-
-    base = currencies[0].upper()
-    target = currencies[1].upper()
-    if not (len(base) == 3 and len(target) == 3):
-        return None
-
-    amount = 1.0
-    # e.g. "100 USD to VND", "đổi 100 usd sang vnd"
-    explicit_amount_match = re.search(r"(\d+(?:[.,]\d+)?)\s*[A-Za-z]{3}", upper)
-    if explicit_amount_match:
-        parsed = _normalize_amount(explicit_amount_match.group(1))
-        if parsed is not None:
-            amount = parsed
-    else:
-        first_num = _AMOUNT_PATTERN.search(text)
-        if first_num:
-            parsed = _normalize_amount(first_num.group(1))
-            if parsed is not None:
-                amount = parsed
-
-    if amount <= 0:
-        return None
-    return amount, base, target
+    return parsed.amount, parsed.base, parsed.target
 
 
 async def execute_exchange_rate(message: str, context: dict[str, Any] | None = None) -> ToolResult:
     started = time.perf_counter()
     timeout_seconds = float((context or {}).get("timeout_seconds", 6))
-    parsed = extract_exchange_request(message)
-    if not parsed:
+
+    request, validation = extract_exchange_request_with_validation(message)
+    if request is None:
+        error = "invalid_currency_pair"
+        if validation and validation.error_code:
+            error = validation.error_code
         return ToolResult(
             name="exchange_rate",
             success=False,
-            content="Could not parse currency pair and amount.",
-            error="invalid_currency_pair",
+            content="Could not parse a valid currency pair for exchange lookup.",
+            error=error,
             confidence="low",
             latency_ms=int((time.perf_counter() - started) * 1000),
         )
 
-    amount, base, target = parsed
-    if not (base.isalpha() and target.isalpha() and len(base) == 3 and len(target) == 3):
+    amount, base, target = request.amount, request.base, request.target
+    pair_check = validate_currency_pair_for_provider(base, target)
+    if not pair_check.ok:
         return ToolResult(
             name="exchange_rate",
             success=False,
-            content="Invalid currency code format.",
-            error="invalid_currency_code",
+            content="Currency pair is not supported by the exchange provider.",
+            error=pair_check.error_code or "invalid_currency_code",
             confidence="low",
             latency_ms=int((time.perf_counter() - started) * 1000),
         )
 
     query_params = {"from": base, "to": target, "amount": amount}
-    source_url = f"https://api.frankfurter.app/latest?{urlencode(query_params)}"
     try:
         async with httpx.AsyncClient(timeout=timeout_seconds) as client:
             response = await client.get("https://api.frankfurter.app/latest", params=query_params)
@@ -122,7 +94,7 @@ async def execute_exchange_rate(message: str, context: dict[str, Any] | None = N
         f"Rate: {rate}\n"
         f"Converted: {converted_amount}\n"
         f"Date: {date}\n"
-        f"Source: {source_url}"
+        f"Source: frankfurter"
     )
     return ToolResult(
         name="exchange_rate",
@@ -135,16 +107,15 @@ async def execute_exchange_rate(message: str, context: dict[str, Any] | None = N
             "rate": rate,
             "converted_amount": converted_amount,
             "date": date,
-            "source_url": source_url,
+            "provider": "frankfurter",
         },
         sources=[
             {
                 "title": f"Frankfurter {base}->{target}",
-                "url": source_url,
+                "url": "https://api.frankfurter.app",
                 "snippet": f"{amount} {base} = {converted_amount} {target}",
             }
         ],
         confidence="high",
         latency_ms=int((time.perf_counter() - started) * 1000),
     )
-

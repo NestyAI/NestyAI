@@ -494,15 +494,22 @@ class NestyProMultiModelOrchestrator:
                     "the retrieved memory/context and avoid external speculation."
                 )
             if getattr(planner_meta, "search_planned", False) and not getattr(planner_meta, "search_used", False):
-                extra_rules.append(
-                    "- Web search was planned but NOT used. Do not claim to have searched or checked the web/online."
-                )
+                if getattr(planner_meta, "retrieval_fallback_used", False):
+                    extra_rules.append(
+                        "- Retrieval fallback was attempted but web search did not return usable context. "
+                        "State that retrieval/search was unavailable or failed; do not claim you lack internet access."
+                    )
+                else:
+                    extra_rules.append(
+                        "- Web search was planned but NOT used. Do not claim to have searched or checked the web/online."
+                    )
 
         retrieval_meta = (context_metadata or {}).get("retrieval")
         if role == "finalizer" and retrieval_meta and bool(getattr(retrieval_meta, "context_used", False)):
             extra_rules.append(
                 "- Retrieved context is available. Answer concretely from the provided context. "
-                "Do not claim information is missing when relevant context is present."
+                "Do not claim information is missing, that you lack internet access, or that you cannot access current data "
+                "when relevant context is present."
             )
         
         if extra_rules:

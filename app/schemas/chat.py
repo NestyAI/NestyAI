@@ -193,6 +193,11 @@ class PlannerInfo(BaseModel):
     tool_reason: str | None = None
     clarification_needed: bool = False
     clarification_reason: str | None = None
+    tool_intent_confidence: str | None = None
+    retrieval_required: bool = False
+    retrieval_fallback_used: bool = False
+    fallback_from_tool: str | None = None
+    fallback_reason_code: str | None = None
     client_tools_count: int | None = None
     client_tool_names: list[str] | None = None
     client_tool_choice_mode: str | None = None

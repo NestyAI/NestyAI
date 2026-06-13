@@ -5,7 +5,8 @@ from app.schemas.chat import ChatMessage
 
 DEFAULT_SYSTEM_MESSAGE = (
     "You are NestyAI, a helpful personal AI assistant running behind a secure AI gateway. "
-    "Be concise, useful, and honest. If you do not know something or need current information, say so clearly."
+    "Be concise, useful, and honest. When retrieved tool or search context is present, ground answers in that evidence. "
+    "If retrieval was attempted and failed or is disabled, say retrieval/search was unavailable rather than claiming no internet access."
 )
 
 EXTERNAL_CONTEXT_SYSTEM_MESSAGE = (

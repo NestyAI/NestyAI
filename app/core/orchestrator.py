@@ -54,7 +54,14 @@ from app.schemas.chat import (
 )
 from app.schemas.tools import SearchResult, SourceItem, ToolExecutionMetadata, ToolMetadata
 from app.storage.db import get_connection
+from app.core.retrieval_recovery import (
+    build_retrieval_unavailable_notice,
+    build_tool_failure_notice,
+    should_attempt_retrieval_fallback,
+)
+from app.tools.freshness_intent import detect_freshness_intent
 from app.tools.planner import ToolPlanDecision, plan_tools, plan_tools_decision, should_skip_web_search_for_tools
+from app.tools.tool_validation import validate_tool_args
 from app.tools.search_query_planner import plan_search_queries
 from app.tools.registry import ToolRegistry
 from app.tools.search_intent import SearchPlanDecision, plan_search_intent
@@ -1090,6 +1097,8 @@ class ChatOrchestrator:
             tool_reason=tool_plan.reason,
             clarification_needed=bool(tool_plan.clarification_needed),
             clarification_reason=tool_plan.clarification_reason,
+            tool_intent_confidence=tool_plan.tool_intent_confidence,
+            retrieval_required=bool(tool_plan.retrieval_required),
         )
         planner_info = self._apply_client_tools_compat(planner_info, request)
 
@@ -1127,6 +1136,63 @@ class ChatOrchestrator:
         tools_meta.search.used = bool(search_used)
         planner_info.search_used = bool(search_used)
         planner_info.tools_used = list(tool_used)
+
+        freshness = detect_freshness_intent(latest_user_message)
+        high_confidence_success = any(
+            execution.success and execution.confidence == "high" for execution in executions
+        )
+        ineligible_reasons = [
+            decision.reason_code
+            for decision in tool_plan.intent_decisions
+            if decision.primary_tool and not decision.eligible and decision.reason_code
+        ]
+        tool_failures = [
+            {"name": execution.name, "error_code": execution.error_code or execution.error}
+            for execution in executions
+            if not execution.success
+        ]
+        recovery = should_attempt_retrieval_fallback(
+            freshness=freshness,
+            search_already_used=bool(search_used),
+            search_context_present=bool(search_context_items),
+            high_confidence_tool_succeeded=high_confidence_success,
+            tool_failures=tool_failures,
+            ineligible_tool_reasons=ineligible_reasons,
+        )
+        if recovery.should_run:
+            fallback_sources, fallback_tools, fallback_items, fallback_used = await self._maybe_apply_search_context(
+                request=request,
+                latest_user_message=latest_user_message,
+                model_profile=model_profile_dict,
+                tools_meta=tools_meta,
+                request_id=request_id,
+                search_plan=replace(search_plan, should_use=True, search_planned=True, decision="retrieval_fallback"),
+                tool_plan=ToolPlanDecision(decision="no_tool_needed", tools_planned=[]),
+                lifecycle=lifecycle,
+            )
+            if fallback_used or fallback_items:
+                sources.extend(fallback_sources)
+                tools_meta.used.extend(fallback_tools)
+                retrieval_items.extend(fallback_items)
+                search_used = search_used or fallback_used
+                tools_meta.search.retrieval_fallback_used = True
+                tools_meta.search.fallback_from_tool = recovery.fallback_from_tool
+                tools_meta.search.fallback_reason_code = recovery.reason_code
+                planner_info.retrieval_fallback_used = True
+                planner_info.fallback_from_tool = recovery.fallback_from_tool
+                planner_info.fallback_reason_code = recovery.reason_code
+                planner_info.search_used = bool(search_used)
+                tools_meta.search.used = bool(search_used)
+            elif freshness.requires_freshness and not search_context_items:
+                retrieval_items.append(
+                    build_context_item(
+                        source="search",
+                        content=build_retrieval_unavailable_notice(recovery.reason_code),
+                        title="Retrieval notice",
+                        score=0.4,
+                        metadata={"failed": True, "error_code": recovery.reason_code or "retrieval_unavailable"},
+                    )
+                )
 
         assembly = assemble_hybrid_context(
             self._sanitize_retrieval_items(retrieval_items),
@@ -1364,6 +1430,40 @@ class ChatOrchestrator:
         context_items: list[ContextItem] = []
 
         for tool_name in planned_tools:
+            validation = validate_tool_args(tool_name, message)
+            if not validation.ok:
+                result_error = validation.error_code or "invalid_tool_args"
+                used.append(tool_name)
+                executions.append(
+                    ToolExecutionMetadata(
+                        name=tool_name,
+                        success=False,
+                        error=result_error,
+                        error_code=result_error,
+                        confidence="low",
+                    )
+                )
+                if lifecycle is not None:
+                    lifecycle.emit("tool.failed", status="failed", tool=tool_name, error_code=result_error)
+                context_items.append(
+                    build_context_item(
+                        source="tools",
+                        content=build_tool_failure_notice(tool_name, result_error),
+                        title=tool_name,
+                        score=0.35,
+                        metadata={"success": False, "error_code": result_error},
+                    )
+                )
+                log_safe(
+                    self.logger,
+                    "tool_validation_failed",
+                    request_id=request_id,
+                    model_alias=model_alias,
+                    provider=tool_name,
+                    error_code=result_error,
+                )
+                continue
+
             result = await self.tool_registry.execute_tool(
                 name=tool_name,
                 message=message,
@@ -1425,13 +1525,14 @@ class ChatOrchestrator:
                             metadata={"success": True},
                         )
                     )
-            elif isinstance(tools_mode, list):
+            elif not result.success:
                 context_items.append(
                     build_context_item(
                         source="tools",
-                        content=f"[Tool: {tool_name}]\nStatus: failed\nError: {result.error or 'tool_execution_failed'}",
+                        content=build_tool_failure_notice(tool_name, result.error or "tool_execution_failed"),
                         title=tool_name,
-                        metadata={"success": False},
+                        score=0.35,
+                        metadata={"success": False, "error_code": result.error},
                     )
                 )
 

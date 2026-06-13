@@ -1,9 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import re
-import unicodedata
 
+from app.tools.freshness_intent import FreshnessDecision, detect_freshness_intent
+from app.tools.intent_router import (
+    ToolIntentDecision,
+    route_tool_intents,
+    select_executable_tools,
+    should_skip_web_search_for_tool_plan,
+)
+from app.tools.text_normalize import normalize_message_text
+from app.tools.tool_intent_signals import (
+    has_calculator_intent,
+    has_exchange_intent,
+    has_package_intent,
+    has_weather_intent,
+    has_wikipedia_intent,
+)
 from app.tools.calculator import extract_calculator_expression
 from app.tools.exchange_rate import extract_exchange_request
 from app.tools.package_version import extract_package_name
@@ -17,73 +30,10 @@ class ToolPlanDecision:
     reason: str | None = None
     clarification_needed: bool = False
     clarification_reason: str | None = None
-
-
-def _tool_match_reason(tools: list[str]) -> str:
-    if not tools:
-        return "no_deterministic_tool_intent"
-    if len(tools) == 1:
-        return f"matched_{tools[0]}"
-    return "matched_multiple_tools"
-
-
-_PACKAGE_INTENT_TERMS = [
-    "latest version",
-    "release",
-    "changelog",
-    "npm",
-    "pypi",
-    "pip",
-    "package",
-    "phan ban",
-    "ban moi nhat",
-]
-
-_WEATHER_INTENT_TERMS = [
-    "weather",
-    "thoi tiet",
-    "forecast",
-    "du bao",
-    "temperature",
-    "nhiet do",
-    "rain",
-    "mua",
-]
-
-_EXCHANGE_INTENT_TERMS = [
-    "exchange rate",
-    "ty gia",
-    "doi tien",
-    "currency",
-    "convert",
-]
-
-_WIKIPEDIA_INTENT_TERMS = [
-    "what is",
-    "who is",
-    "define",
-    "definition",
-    "la gi",
-    "dinh nghia",
-    "khai niem",
-    "ai la",
-]
-
-_REPO_OR_CODE_TERMS = [
-    "repo",
-    "repository",
-    "project",
-    "local",
-    "file",
-    "code",
-    "bug",
-    "error",
-    "traceback",
-    "stack trace",
-    "debug",
-    "troubleshoot",
-    "fix",
-]
+    intent_decisions: list[ToolIntentDecision] = field(default_factory=list)
+    requires_freshness: bool = False
+    tool_intent_confidence: str | None = None
+    retrieval_required: bool = False
 
 
 _DETERMINISTIC_TOOLS = frozenset(
@@ -97,38 +47,16 @@ _DETERMINISTIC_TOOLS = frozenset(
 )
 
 
-def should_skip_web_search_for_tools(
-    tool_plan: ToolPlanDecision,
-    explicit_search_mode: str,
-    message: str = "",
-) -> bool:
-    if str(explicit_search_mode or "auto").strip().lower() == "on":
-        return False
-    if tool_plan.decision != "tool_selected" or not tool_plan.tools_planned:
-        return False
-    if not all(tool_name in _DETERMINISTIC_TOOLS for tool_name in tool_plan.tools_planned):
-        return False
-
-    normalized = f" {_normalize_text(message)} "
-    planned = set(tool_plan.tools_planned)
-    if _looks_like_weather_intent(normalized) and "weather_lookup" not in planned:
-        return False
-    if _looks_like_exchange_intent(normalized) and "exchange_rate" not in planned:
-        return False
-    if _looks_like_package_intent(normalized) and "package_version_lookup" not in planned:
-        return False
-    if _looks_like_wikipedia_intent(normalized) and "wikipedia_lookup" not in planned:
-        return False
-    if _looks_like_calculator_intent(normalized) and "calculator" not in planned:
-        return False
-    return True
+def _tool_match_reason(tools: list[str]) -> str:
+    if not tools:
+        return "no_deterministic_tool_intent"
+    if len(tools) == 1:
+        return f"matched_{tools[0]}"
+    return "matched_multiple_tools"
 
 
 def _normalize_text(text: str) -> str:
-    normalized = unicodedata.normalize("NFKD", str(text or ""))
-    normalized = normalized.encode("ascii", "ignore").decode("ascii")
-    normalized = re.sub(r"\s+", " ", normalized.lower()).strip()
-    return normalized
+    return normalize_message_text(text)
 
 
 def _dedupe_preserve(items: list[str]) -> list[str]:
@@ -142,88 +70,91 @@ def _dedupe_preserve(items: list[str]) -> list[str]:
     return result
 
 
-def _has_any(normalized: str, phrases: list[str]) -> bool:
-    return any(phrase in normalized for phrase in phrases)
-
-
-def _looks_like_wikipedia_intent(normalized: str) -> bool:
-    if _has_any(normalized, _REPO_OR_CODE_TERMS):
-        return False
-    return _has_any(normalized, _WIKIPEDIA_INTENT_TERMS)
-
-
-def _looks_like_package_intent(normalized: str) -> bool:
-    return _has_any(normalized, _PACKAGE_INTENT_TERMS)
-
-
-def _looks_like_weather_intent(normalized: str) -> bool:
-    return _has_any(normalized, _WEATHER_INTENT_TERMS)
-
-
-def _looks_like_exchange_intent(normalized: str) -> bool:
-    return _has_any(normalized, _EXCHANGE_INTENT_TERMS)
-
-
-def _looks_like_calculator_intent(normalized: str) -> bool:
-    if not bool(re.search(r"[0-9]", normalized)):
-        return False
-    return bool(re.search(r"[+\-*/%()]", normalized)) or " of " in normalized
-
-
-def _detect_tools_auto(message: str) -> list[str]:
-    normalized = f" {_normalize_text(message)} "
-    detected: list[str] = []
-    expression = extract_calculator_expression(message)
-    if expression:
-        detected.append("calculator")
-    package_name = extract_package_name(message)
-    if package_name and _looks_like_package_intent(normalized):
-        detected.append("package_version_lookup")
-    if _looks_like_weather_intent(normalized) and extract_weather_location(message, None):
-        detected.append("weather_lookup")
-    if extract_exchange_request(message) is not None or _looks_like_exchange_intent(normalized):
-        if extract_exchange_request(message) is not None:
-            detected.append("exchange_rate")
-    if _looks_like_wikipedia_intent(normalized):
-        detected.append("wikipedia_lookup")
-    return detected
+def should_skip_web_search_for_tools(
+    tool_plan: ToolPlanDecision,
+    explicit_search_mode: str,
+    message: str = "",
+) -> bool:
+    freshness = detect_freshness_intent(message) if message.strip() else FreshnessDecision(
+        requires_freshness=tool_plan.requires_freshness
+    )
+    return should_skip_web_search_for_tool_plan(
+        tool_plan.tools_planned,
+        tool_plan.intent_decisions,
+        explicit_search_mode,
+        message,
+        freshness,
+    )
 
 
 def _missing_required_tool_reason(message: str, normalized: str, allowed_tools: set[str]) -> str | None:
-    if "calculator" in allowed_tools and _looks_like_calculator_intent(normalized) and not extract_calculator_expression(message):
+    if "calculator" in allowed_tools and has_calculator_intent(message, normalized) and not extract_calculator_expression(message):
         return "calculator_expression_missing"
-    if "weather_lookup" in allowed_tools and _looks_like_weather_intent(normalized) and not extract_weather_location(message, None):
+    if "weather_lookup" in allowed_tools and has_weather_intent(normalized) and not extract_weather_location(message, None):
         return "weather_location_missing"
-    if "exchange_rate" in allowed_tools and _looks_like_exchange_intent(normalized) and extract_exchange_request(message) is None:
+    if "exchange_rate" in allowed_tools and has_exchange_intent(message) and extract_exchange_request(message) is None:
         return "exchange_pair_missing"
-    if "package_version_lookup" in allowed_tools and _looks_like_package_intent(normalized) and not extract_package_name(message):
+    if "package_version_lookup" in allowed_tools and has_package_intent(normalized) and not extract_package_name(message):
         return "package_name_missing"
-    if "wikipedia_lookup" in allowed_tools and _looks_like_wikipedia_intent(normalized) and not _has_any(normalized, _WIKIPEDIA_INTENT_TERMS):
+    if "wikipedia_lookup" in allowed_tools and has_wikipedia_intent(normalized) and not has_wikipedia_intent(normalized):
         return "wikipedia_entity_missing"
     return None
 
 
-def _detect_tools_low(message: str) -> list[str]:
+def _plan_with_router(
+    message: str,
+    allowed_tools: set[str],
+    max_tool_calls: int,
+    aggressiveness: str = "auto",
+) -> ToolPlanDecision:
+    planned, intent_decisions, freshness = select_executable_tools(
+        message,
+        allowed_tools,
+        max_tool_calls,
+        aggressiveness=aggressiveness,
+    )
     normalized = f" {_normalize_text(message)} "
-    detected: list[str] = []
+    missing_reason = _missing_required_tool_reason(message, normalized, allowed_tools)
+    confidence = None
+    if planned:
+        for decision in intent_decisions:
+            if decision.primary_tool in planned:
+                confidence = decision.confidence
+                break
 
-    if extract_calculator_expression(message):
-        detected.append("calculator")
-    if _looks_like_weather_intent(normalized) and extract_weather_location(message, None):
-        detected.append("weather_lookup")
-    if _looks_like_exchange_intent(normalized) and extract_exchange_request(message) is not None:
-        detected.append("exchange_rate")
-    if _looks_like_package_intent(normalized) and extract_package_name(message):
-        detected.append("package_version_lookup")
-    return detected
+    if planned:
+        return ToolPlanDecision(
+            decision="tool_selected",
+            tools_planned=planned,
+            reason=_tool_match_reason(planned),
+            clarification_needed=bool(missing_reason),
+            clarification_reason=missing_reason,
+            intent_decisions=intent_decisions,
+            requires_freshness=freshness.requires_freshness,
+            tool_intent_confidence=confidence,
+            retrieval_required=freshness.requires_freshness,
+        )
 
+    if missing_reason:
+        return ToolPlanDecision(
+            decision="missing_required_parameters",
+            tools_planned=[],
+            reason=missing_reason,
+            clarification_needed=True,
+            clarification_reason=missing_reason,
+            intent_decisions=intent_decisions,
+            requires_freshness=freshness.requires_freshness,
+            retrieval_required=freshness.requires_freshness,
+        )
 
-def _detect_tools_high_when_needed(message: str) -> list[str]:
-    normalized = f" {_normalize_text(message)} "
-    detected = _detect_tools_auto(message)
-    if _looks_like_wikipedia_intent(normalized):
-        detected.append("wikipedia_lookup")
-    return detected
+    return ToolPlanDecision(
+        decision="no_tool_needed",
+        tools_planned=[],
+        reason="no_deterministic_tool_intent",
+        intent_decisions=intent_decisions,
+        requires_freshness=freshness.requires_freshness,
+        retrieval_required=freshness.requires_freshness,
+    )
 
 
 def _detect_tools_with_validation(message: str, model_config: dict, explicit_tools: str | list[str] | None = None) -> ToolPlanDecision:
@@ -240,105 +171,23 @@ def _detect_tools_with_validation(message: str, model_config: dict, explicit_too
         if mode not in {"auto", ""}:
             return ToolPlanDecision(decision="unknown", tools_planned=[], reason="unknown_tools_mode")
 
-    normalized = f" {_normalize_text(message)} "
-    selected: list[str] = []
-    clarification_needed = False
-    clarification_reason: str | None = None
-
     if isinstance(explicit, list):
-        candidates = [str(name) for name in explicit if str(name) in allowed_tools]
-        for tool_name in candidates:
-            if tool_name == "calculator":
-                if extract_calculator_expression(message):
-                    selected.append(tool_name)
-                elif _looks_like_calculator_intent(normalized):
-                    clarification_needed = True
-                    clarification_reason = clarification_reason or "calculator_expression_missing"
-            elif tool_name == "weather_lookup":
-                if extract_weather_location(message, None):
-                    selected.append(tool_name)
-                elif _looks_like_weather_intent(normalized):
-                    clarification_needed = True
-                    clarification_reason = clarification_reason or "weather_location_missing"
-            elif tool_name == "exchange_rate":
-                if extract_exchange_request(message) is not None:
-                    selected.append(tool_name)
-                elif _looks_like_exchange_intent(normalized):
-                    clarification_needed = True
-                    clarification_reason = clarification_reason or "exchange_pair_missing"
-            elif tool_name == "package_version_lookup":
-                if extract_package_name(message):
-                    selected.append(tool_name)
-                elif _looks_like_package_intent(normalized):
-                    clarification_needed = True
-                    clarification_reason = clarification_reason or "package_name_missing"
-            elif tool_name == "wikipedia_lookup":
-                if _looks_like_wikipedia_intent(normalized):
-                    selected.append(tool_name)
-                elif _has_any(normalized, _WIKIPEDIA_INTENT_TERMS):
-                    clarification_needed = True
-                    clarification_reason = clarification_reason or "wikipedia_entity_missing"
-
-        selected = _dedupe_preserve(selected)[:max_tool_calls]
-        missing_reason = _missing_required_tool_reason(message, normalized, allowed_tools)
-        if selected:
+        planned = [str(name) for name in explicit if str(name) in allowed_tools]
+        planned = _dedupe_preserve(planned)[:max_tool_calls]
+        freshness = detect_freshness_intent(message)
+        if planned:
             return ToolPlanDecision(
                 decision="tool_selected",
-                tools_planned=selected,
-                reason=_tool_match_reason(selected),
-                clarification_needed=bool(clarification_needed or missing_reason),
-                clarification_reason=clarification_reason or missing_reason,
+                tools_planned=planned,
+                reason=_tool_match_reason(planned),
+                intent_decisions=route_tool_intents(message, set(planned)),
+                requires_freshness=freshness.requires_freshness,
+                retrieval_required=freshness.requires_freshness,
             )
-        if clarification_needed or missing_reason:
-            return ToolPlanDecision(
-                decision="missing_required_parameters",
-                tools_planned=[],
-                reason=clarification_reason or missing_reason or "missing_required_parameters",
-                clarification_needed=True,
-                clarification_reason=clarification_reason or missing_reason,
-            )
-        return ToolPlanDecision(decision="no_tool_needed", tools_planned=[], reason="explicit_tools_no_match")
+        return ToolPlanDecision(decision="explicit_tools_no_match", tools_planned=[], reason="explicit_tools_no_match")
 
     aggressiveness = str(model_config.get("tool_aggressiveness", "auto")).strip().lower()
-    planned: list[str] = []
-
-    if aggressiveness == "low":
-        if extract_calculator_expression(message):
-            planned.append("calculator")
-        if _looks_like_package_intent(normalized) and extract_package_name(message):
-            planned.append("package_version_lookup")
-        if _looks_like_weather_intent(normalized) and extract_weather_location(message, None):
-            planned.append("weather_lookup")
-        if _looks_like_exchange_intent(normalized) and extract_exchange_request(message) is not None:
-            planned.append("exchange_rate")
-    elif aggressiveness == "high_when_needed":
-        planned = _detect_tools_high_when_needed(message)
-    else:
-        planned = _detect_tools_auto(message)
-
-    planned = [name for name in planned if name in allowed_tools]
-    planned = _dedupe_preserve(planned)[:max_tool_calls]
-    missing_reason = _missing_required_tool_reason(message, normalized, allowed_tools)
-
-    if planned:
-        return ToolPlanDecision(
-            decision="tool_selected",
-            tools_planned=planned,
-            reason=_tool_match_reason(planned),
-            clarification_needed=bool(missing_reason),
-            clarification_reason=missing_reason,
-        )
-
-    if missing_reason:
-        return ToolPlanDecision(
-            decision="missing_required_parameters",
-            tools_planned=[],
-            reason=missing_reason,
-            clarification_needed=True,
-            clarification_reason=missing_reason,
-        )
-
-    return ToolPlanDecision(decision="no_tool_needed", tools_planned=[], reason="no_deterministic_tool_intent")
+    return _plan_with_router(message, allowed_tools, max_tool_calls, aggressiveness=aggressiveness)
 
 
 def plan_tools(
@@ -346,42 +195,7 @@ def plan_tools(
     model_config: dict,
     explicit_tools: str | list[str] | None = None,
 ) -> list[str]:
-    allowed_tools = set(model_config.get("allowed_tools", []))
-    max_tool_calls = int(model_config.get("max_tool_calls", 0))
-    if max_tool_calls <= 0:
-        return []
-
-    explicit: str | list[str] | None = explicit_tools
-    if isinstance(explicit, str):
-        mode = explicit.strip().lower()
-        if mode == "off":
-            return []
-        if mode == "auto" or mode == "":
-            aggressiveness = str(model_config.get("tool_aggressiveness", "auto")).strip().lower()
-            if aggressiveness == "low":
-                planned = _detect_tools_low(message)
-            elif aggressiveness == "high_when_needed":
-                planned = _detect_tools_high_when_needed(message)
-            else:
-                planned = _detect_tools_auto(message)
-            planned = [name for name in planned if name in allowed_tools]
-            return _dedupe_preserve(planned)[:max_tool_calls]
-        return []
-
-    if isinstance(explicit, list):
-        planned = [str(name) for name in explicit]
-        planned = [name for name in planned if name in allowed_tools]
-        return _dedupe_preserve(planned)[:max_tool_calls]
-
-    aggressiveness = str(model_config.get("tool_aggressiveness", "auto")).strip().lower()
-    if aggressiveness == "low":
-        planned = _detect_tools_low(message)
-    elif aggressiveness == "high_when_needed":
-        planned = _detect_tools_high_when_needed(message)
-    else:
-        planned = _detect_tools_auto(message)
-    planned = [name for name in planned if name in allowed_tools]
-    return _dedupe_preserve(planned)[:max_tool_calls]
+    return plan_tools_decision(message, model_config, explicit_tools=explicit_tools).tools_planned
 
 
 def plan_tools_decision(

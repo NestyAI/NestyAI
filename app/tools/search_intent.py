@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import re
 import unicodedata
 
+from app.tools.freshness_intent import detect_freshness_intent
+
 
 @dataclass(slots=True)
 class SearchPlanDecision:
@@ -171,6 +173,10 @@ def should_use_search(
     normalized = _normalize_text(message)
     if not normalized:
         return False
+
+    freshness = detect_freshness_intent(message)
+    if freshness.commodity_or_market_price or freshness.news_or_current_events:
+        return True
 
     for phrase in _NO_SEARCH_TERMS:
         if phrase in normalized:
