@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,7 +19,7 @@ from app.providers.ollama_cloud import OllamaCloudProvider
 from app.providers.openrouter import OpenRouterProvider
 from app.providers.mistral import MistralProvider
 from app.providers.openai_builtin import OpenAIBuiltinProvider
-from app.providers.openai_compatible import OpenAICompatibleChatProvider
+from app.providers.deepseek import DeepSeekProvider
 from app.providers.z_ai import ZAIProvider
 
 
@@ -136,14 +137,14 @@ PROVIDER_CAPABILITIES: dict[str, ProviderCapabilities] = {
     ),
     "z_ai": ProviderCapabilities(
         provider_id="z_ai",
-        display_name="Z AI",
+        display_name="Zhipu AI",
         supports_streaming=True,
         supports_chat_completions=True,
         supports_tools=True,
         supports_json_mode=True,
         supports_reasoning_effort=False,
         default_timeout_seconds=30.0,
-        health_check_model=None,
+        health_check_model="glm-4-flash",
         api_base_env_name="Z_AI_BASE_URL",
         api_key_env_name="Z_AI_API_KEY",
     ),
@@ -234,12 +235,9 @@ def build_builtin_chat_providers(settings: Settings, timeout_seconds: float | No
             timeout_seconds=ollama_timeout,
             base_url=settings.ollama_base_url,
         ),
-        "deepseek": OpenAICompatibleChatProvider(
-            provider_name="deepseek",
+        "deepseek": DeepSeekProvider(
             api_key=_resolve_builtin_api_key(settings, "deepseek"),
             timeout_seconds=timeout,
-            endpoint="https://api.deepseek.com/v1/chat/completions",
-            require_api_key=True,
         ),
         "openai": OpenAIBuiltinProvider(
             api_key=_resolve_builtin_api_key(settings, "openai"),
@@ -252,7 +250,7 @@ def build_builtin_chat_providers(settings: Settings, timeout_seconds: float | No
         "z_ai": ZAIProvider(
             api_key=_resolve_builtin_api_key(settings, "z_ai"),
             timeout_seconds=timeout,
-            base_url=str(getattr(settings, "z_ai_base_url", "https://api.z.ai/v1") or "https://api.z.ai/v1"),
+            base_url=os.getenv("Z_AI_BASE_URL") or None,
         ),
         "google_gemini": GeminiProvider(
             api_key=_resolve_builtin_api_key(settings, "google_gemini"),

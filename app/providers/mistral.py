@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.providers.constants import MISTRAL_CHAT_COMPLETIONS_URL
 from app.providers.openai_compatible import OpenAICompatibleChatProvider
 
 
@@ -9,5 +10,5 @@ class MistralProvider(OpenAICompatibleChatProvider):
             provider_name="mistral",
             api_key=api_key,
             timeout_seconds=timeout_seconds,
-            endpoint="https://api.mistral.ai/v1/chat/completions",
+            endpoint=MISTRAL_CHAT_COMPLETIONS_URL,
         )

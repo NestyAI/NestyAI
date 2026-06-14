@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from app.providers.constants import ANTHROPIC_MESSAGES_URL
 from app.core.errors import MissingAPIKeyError, ProviderError, StreamingNotSupportedError
 from app.core.http_client import get_shared_async_client
 from app.providers.base import BaseProvider
@@ -19,7 +20,7 @@ class AnthropicProvider(BaseProvider):
     def __init__(self, api_key: str | None, timeout_seconds: float) -> None:
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
-        self.endpoint = "https://api.anthropic.com/v1/messages"
+        self.endpoint = ANTHROPIC_MESSAGES_URL
 
     def _require_api_key(self) -> str:
         if not self.api_key:

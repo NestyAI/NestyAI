@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 
+from app.providers.constants import OLLAMA_CLOUD_DEFAULT_BASE_URL
 from app.core.errors import MissingAPIKeyError, ProviderError
 from app.core.http_client import get_shared_async_client
 from app.providers.base import BaseProvider
@@ -20,7 +21,7 @@ class OllamaCloudProvider(BaseProvider):
     def __init__(self, api_key: str | None, timeout_seconds: float, base_url: str | None = None) -> None:
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
-        self.base_url = str(base_url or "https://ollama.com").strip().rstrip("/")
+        self.base_url = str(base_url or OLLAMA_CLOUD_DEFAULT_BASE_URL).strip().rstrip("/")
 
     @property
     def endpoint(self) -> str:

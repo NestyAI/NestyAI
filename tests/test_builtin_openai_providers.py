@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from app.config import Settings
 from app.providers.constants import BUILTIN_PROVIDER_IDS
 from app.providers.registry import PROVIDER_CAPABILITIES, build_builtin_chat_providers
+from app.providers.z_ai import ZAIProvider
 
 
 def test_new_openai_compatible_builtin_ids_registered() -> None:
@@ -27,9 +30,15 @@ def test_build_builtin_chat_providers_includes_new_providers() -> None:
 
 
 def test_z_ai_uses_configurable_base_url() -> None:
-    settings = Settings(z_ai_api_key="sk-zai", z_ai_base_url="https://custom.z.ai/v1")
+    provider = ZAIProvider(api_key="sk-zai", timeout_seconds=30.0, base_url="https://custom.z.ai/v1")
+    assert provider.endpoint == "https://custom.z.ai/v1/chat/completions"
+
+
+def test_z_ai_default_base_url_is_zhipu_open_platform(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("Z_AI_BASE_URL", raising=False)
+    settings = Settings(z_ai_api_key="sk-zai")
     providers = build_builtin_chat_providers(settings)
-    assert providers["z_ai"].endpoint == "https://custom.z.ai/v1/chat/completions"
+    assert providers["z_ai"].endpoint == "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 
 
 def test_openai_compatible_providers_support_streaming() -> None:

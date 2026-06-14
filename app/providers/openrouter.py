@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.providers.constants import OPENROUTER_CHAT_COMPLETIONS_URL
 from app.providers.openai_compatible import OpenAICompatibleChatProvider
 
 
@@ -9,5 +10,5 @@ class OpenRouterProvider(OpenAICompatibleChatProvider):
             provider_name="openrouter",
             api_key=api_key,
             timeout_seconds=timeout_seconds,
-            endpoint="https://openrouter.ai/api/v1/chat/completions",
+            endpoint=OPENROUTER_CHAT_COMPLETIONS_URL,
         )

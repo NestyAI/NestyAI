@@ -8,6 +8,8 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
+from app.providers.constants import OLLAMA_CLOUD_DEFAULT_BASE_URL
+
 
 load_dotenv()
 
@@ -34,7 +36,7 @@ class Settings(BaseModel):
     nvidia_api_key: str | None = None
     nvidia_base_url: str | None = None
     ollama_api_key: str | None = None
-    ollama_base_url: str = "https://ollama.com"
+    ollama_base_url: str = OLLAMA_CLOUD_DEFAULT_BASE_URL
     ollama_request_timeout_seconds: float = 60.0
     weather_provider_api_key: str | None = None
     exchange_rate_api_key: str | None = None
@@ -91,7 +93,6 @@ class Settings(BaseModel):
     openai_api_key: str | None = None
     mistral_api_key: str | None = None
     z_ai_api_key: str | None = None
-    z_ai_base_url: str = "https://api.z.ai/v1"
     google_gemini_api_key: str | None = None
     anthropic_claude_api_key: str | None = None
     nesty_provider_credentials_enabled: bool = False
@@ -151,8 +152,8 @@ class Settings(BaseModel):
 
     @classmethod
     def from_env(cls) -> "Settings":
-        ollama_base_url_raw = str(os.getenv("OLLAMA_BASE_URL", "https://ollama.com") or "").strip()
-        ollama_base_url = (ollama_base_url_raw or "https://ollama.com").rstrip("/")
+        ollama_base_url_raw = str(os.getenv("OLLAMA_BASE_URL", OLLAMA_CLOUD_DEFAULT_BASE_URL) or "").strip()
+        ollama_base_url = (ollama_base_url_raw or OLLAMA_CLOUD_DEFAULT_BASE_URL).rstrip("/")
         return cls(
             app_name=os.getenv("APP_NAME", "NestyAI"),
             app_version=os.getenv("APP_VERSION", "0.1.0"),
@@ -234,7 +235,6 @@ class Settings(BaseModel):
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             mistral_api_key=os.getenv("MISTRAL_API_KEY"),
             z_ai_api_key=os.getenv("Z_AI_API_KEY"),
-            z_ai_base_url=str(os.getenv("Z_AI_BASE_URL", "https://api.z.ai/v1") or "https://api.z.ai/v1").rstrip("/"),
             google_gemini_api_key=os.getenv("GOOGLE_GEMINI_API_KEY"),
             anthropic_claude_api_key=os.getenv("ANTHROPIC_API_KEY"),
             nesty_provider_credentials_enabled=_to_bool(os.getenv("NESTY_PROVIDER_CREDENTIALS_ENABLED"), False),

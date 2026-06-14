@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.providers.constants import GROQ_CHAT_COMPLETIONS_URL
 from app.providers.openai_compatible import OpenAICompatibleChatProvider
 
 
@@ -9,5 +10,5 @@ class GroqProvider(OpenAICompatibleChatProvider):
             provider_name="groq",
             api_key=api_key,
             timeout_seconds=timeout_seconds,
-            endpoint="https://api.groq.com/openai/v1/chat/completions",
+            endpoint=GROQ_CHAT_COMPLETIONS_URL,
         )

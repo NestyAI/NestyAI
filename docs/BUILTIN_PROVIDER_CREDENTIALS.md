@@ -46,13 +46,30 @@ Prefix: `/internal/console/runtime` (requires Internal Admin Token + optional co
 
 Built-in provider **definitions** are immutable via API (no delete/rename).
 
+## Built-in provider endpoints (hardcoded)
+
+Defaults live in `app/providers/constants.py`. For most built-ins you only configure the **API key** (env or Console managed secret). Base URL env vars are required only where noted.
+
+| ID | Default endpoint | API key env | Base URL env |
+|----|------------------|-------------|--------------|
+| `openai` | `https://api.openai.com/v1/chat/completions` | `OPENAI_API_KEY` | — |
+| `mistral` | `https://api.mistral.ai/v1/chat/completions` | `MISTRAL_API_KEY` | — |
+| `deepseek` | `https://api.deepseek.com/v1/chat/completions` | `DEEPSEEK_API_KEY` | — |
+| `z_ai` | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `Z_AI_API_KEY` | optional `Z_AI_BASE_URL` (e.g. GLM Coding Plan) |
+| `google_gemini` | `https://generativelanguage.googleapis.com/v1beta` | `GOOGLE_GEMINI_API_KEY` | — |
+| `anthropic_claude` | `https://api.anthropic.com/v1/messages` | `ANTHROPIC_API_KEY` | — |
+| `groq` | `https://api.groq.com/openai/v1/chat/completions` | `GROQ_API_KEY` | — |
+| `openrouter` | `https://openrouter.ai/api/v1/chat/completions` | `OPENROUTER_API_KEY` | — |
+| `ollama_cloud` | `https://ollama.com/api/chat` (default base) | `OLLAMA_API_KEY` | optional `OLLAMA_BASE_URL` |
+| `nvidia` | *(from env)* | `NVIDIA_API_KEY` | **`NVIDIA_BASE_URL`** (required) |
+
 ## New built-in provider IDs
 
 | ID | Type | Env key |
 |----|------|---------|
 | `openai` | OpenAI-compatible | `OPENAI_API_KEY` |
 | `mistral` | OpenAI-compatible | `MISTRAL_API_KEY` |
-| `z_ai` | OpenAI-compatible | `Z_AI_API_KEY` / `Z_AI_BASE_URL` |
+| `z_ai` | OpenAI-compatible (Zhipu AI / 智谱) | `Z_AI_API_KEY` only (optional `Z_AI_BASE_URL` for Coding Plan) |
 | `google_gemini` | Native | `GOOGLE_GEMINI_API_KEY` |
 | `anthropic_claude` | Native | `ANTHROPIC_API_KEY` |
 

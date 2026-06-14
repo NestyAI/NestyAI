@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from app.providers.constants import GEMINI_API_BASE_URL
 from app.core.errors import MissingAPIKeyError, ProviderError, StreamingNotSupportedError
 from app.core.http_client import get_shared_async_client
 from app.providers.base import BaseProvider
@@ -19,7 +20,7 @@ class GeminiProvider(BaseProvider):
     def __init__(self, api_key: str | None, timeout_seconds: float) -> None:
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta"
+        self.base_url = GEMINI_API_BASE_URL
 
     def _require_api_key(self) -> str:
         if not self.api_key:
