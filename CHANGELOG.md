@@ -15,16 +15,23 @@ Tracking rule:
 - ISO vs provider-supported currency validation (`app/tools/validators/currency.py`).
 - Retrieval recovery fallback (`app/core/retrieval_recovery.py`) to run web search after ineligible/failed specialized tools without duplicate search when context already exists.
 - Safe planner/retrieval metadata: `tool_intent_confidence`, `retrieval_required`, `retrieval_fallback_used`, `fallback_from_tool`, `fallback_reason_code`.
+- Pterodactyl / panel **git sync bootstrap**: `bootstrap.py` (recommended `PY_FILE` entrypoint), `git_sync.py`, and `run.py` pre-start sync for locked startup commands where panel `git pull` fails on dirty trees.
+- Centralized built-in upstream URLs in `app/providers/constants.py` with tests in `tests/test_builtin_provider_endpoints.py`.
 
 ### Changed
 - `exchange_rate` requires explicit FX intent; rejects false positives from Vietnamese tokens (NAY/NAM/GIA/HOM/TAI).
 - Frankfurter is not called unless both currencies are provider-supported; ISO-valid but unsupported pairs return `unsupported_currency`.
 - Auto-mode tool failures inject compact `[Retrieval Notice]` context (no raw provider/search payloads).
 - Pro finalizer instructions avoid false “no internet” claims when retrieval context exists or failed.
+- Built-in provider modules use shared endpoint constants; Zhipu (`z_ai`) default base URL corrected to `https://open.bigmodel.cn/api/paas/v4` (optional `Z_AI_BASE_URL` for GLM Coding Plan).
+
+### Fixed
+- Panel VPS deployments blocked by `git pull` merge conflicts on tracked provider files — bootstrap resets tracked files to `origin/main` while preserving runtime SQLite and `.nesty/` secrets.
 
 ### Security
 - Pre-execution tool argument validation blocks invalid outbound provider calls.
 - Client OpenAI/Cursor tools remain ignored; no change to public response or SSE success shape.
+- Git sync never runs `git clean`; gitignored runtime paths (`.env`, `data/`, `.nesty/`) are untouched.
 
 ## [1.6.2] - 2026-06-13
 

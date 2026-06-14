@@ -5,13 +5,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent
+
+# Pterodactyl: panel `git pull` may fail on dirty tree; sync tracked files here too.
+try:
+    from git_sync import sync_git_from_remote
+
+    sync_git_from_remote()
+except ImportError:
+    pass
+
 import uvicorn
 from dotenv import load_dotenv
 
 from app.core.cloudflare_tunnel import start_cloudflared_if_enabled, stop_cloudflared
 
-
-PROJECT_ROOT = Path(__file__).resolve().parent
 load_dotenv(PROJECT_ROOT / ".env")
 
 

@@ -101,18 +101,107 @@ CLOUDFLARED_LOG_PATH=./cloudflare/cloudflared.log
 CLOUDFLARED_PID_PATH=./cloudflare/cloudflared.pid
 ```
 
-Notes:
+#### Panel startup command (typical egg)
 
-- Panel startup command should be:
-  ```bash
-  python run.py
-  ```
-- With `TUNNEL_ENABLED=1` and `CLOUDFLARE_TUNNEL_TOKEN` set, `python run.py` starts `cloudflared` automatically before Gateway startup.
+Many hosts lock the startup command to something like:
+
+```bash
+if [[ -d .git ]] && [[ "${AUTO_UPDATE}" == "1" ]]; then git pull; fi
+if [[ ! -z "${PY_PACKAGES}" ]]; then pip install -U --prefix .local ${PY_PACKAGES}; fi
+pip install -U --prefix .local -r ${REQUIREMENTS_FILE}
+/usr/local/bin/python /home/container/${PY_FILE} ${APP_ARGS}
+```
+
+You usually **cannot** edit that script. You **can** change panel variables such as:
+
+| Variable | Typical label | Recommended value |
+| --- | --- | --- |
+| `PY_FILE` | *APP PY FILE* | `bootstrap.py` |
+| `AUTO_UPDATE` | *AUTO UPDATE* | `1` (keep enabled) |
+| `REQUIREMENTS_FILE` | *REQUIREMENTS FILE* | `requirements.txt` |
+
+Set **`PY_FILE=bootstrap.py`** (not `run.py`) for panel deployments that clone from GitHub.
+
+#### Git sync bootstrap (recommended)
+
+When `AUTO UPDATE=1`, panel `git pull` often **fails** if tracked files were modified on the server (for example after a partial merge or manual edit to provider modules). The startup script still continues; NestyAI uses **`bootstrap.py`** to recover before Gateway starts.
+
+Files (tracked in repo):
+
+| File | Role |
+| --- | --- |
+| `bootstrap.py` | Panel entrypoint — sync git, then exec `run.py` |
+| `git_sync.py` | Shared `git fetch` + `git reset --hard origin/<branch>` helper |
+| `run.py` | Also calls `git_sync` on start when import succeeds (belt-and-suspenders) |
+
+**First-time panel setup**
+
+1. Clone or install NestyAI into `/home/container/` (egg git repo or manual).
+2. Set **`PY_FILE=bootstrap.py`** in the panel.
+3. Configure `.env`, tunnel vars, and provider keys as usual.
+4. Restart the server.
+
+**Expected log markers**
+
+```
+============================================================
+NESTYAI BOOTSTRAP — entrypoint active
+...
+[nesty-git-sync] ok: git fetch origin main
+[nesty-git-sync] ok: git reset --hard origin/main
+[nesty-git-sync] active commit: <short-sha>
+[nesty-bootstrap] exec run.py
+```
+
+If you **do not** see `NESTYAI BOOTSTRAP — entrypoint active`, `PY_FILE` is still `run.py` or `bootstrap.py` is missing from `/home/container/`.
+
+**What git sync changes vs preserves**
+
+| Affected | Not affected (runtime data) |
+| --- | --- |
+| Tracked repo files (`app/`, `config/`, `docs/`, …) | `.env` |
+| | `data/` and `data/nesty.db` (runtime providers, model overrides, conversations) |
+| | `.nesty/` (managed provider secrets, admin token files) |
+| | `cloudflare/` logs and PID files |
+
+Console-managed **runtime providers**, **model_config overrides**, and **built-in provider credentials** live in SQLite + `.nesty/` — they are **not** reverted by bootstrap.
+
+**Ongoing operation**
+
+Keeping **`PY_FILE=bootstrap.py` permanently** is supported and recommended when:
+
+- Panel `git pull` may fail on dirty trees, and
+- You want every restart to align tracked code with `origin/main` before Gateway starts.
+
+Optional env (defaults work for most installs):
+
+```env
+# NESTY_BOOTSTRAP_GIT_SYNC=true
+# NESTY_GIT_BRANCH=main
+# NESTY_GIT_REMOTE=origin
+```
+
+Set `NESTY_BOOTSTRAP_GIT_SYNC=false` only if you intentionally run a fork or pinned commit without remote sync.
+
+**Troubleshooting**
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| Log stops at `git pull` / `Aborting` | Normal when tree is dirty | Ignore if bootstrap banner follows; otherwise fix `PY_FILE` |
+| No bootstrap banner | `PY_FILE=run.py` | Set `PY_FILE=bootstrap.py` and restart |
+| `ImportError: git_sync` | Old install without repo files | Pull latest or upload `git_sync.py` once |
+| `could not reset to origin/main` | Network or missing remote | Check git remote; retry restart |
+| Gateway starts but code looks stale | Sync disabled or no `.git` | Enable sync; confirm repo clone |
+
+#### Tunnel and runtime notes
+
+- With `TUNNEL_ENABLED=1` and `CLOUDFLARE_TUNNEL_TOKEN` set, `run.py` starts `cloudflared` automatically before Gateway startup.
 - If `cloudflared` binary is missing and `TUNNEL_AUTO_INSTALL_CLOUDFLARED=1`, `run.py` attempts a best-effort install to `CLOUDFLARED_BIN_PATH`.
 - If tunnel is disabled or setup fails safely, Gateway still starts normally on local HTTP.
 - `CLOUDFLARED_LOG_PATH` and `CLOUDFLARED_PID_PATH` must point to writable directories.
 - `.cloudflared/` and `cloudflare/` runtime artifacts should never be committed.
 - Gateway still listens locally on HTTP (usually port `8000`).
+- Duplicate bootstrap log lines (stdout + stderr) are intentional so panel consoles that capture only one stream still show sync status.
 
 Production reminders:
 
@@ -149,7 +238,7 @@ NESTY_EPHEMERAL_CONSOLE_KEY_PREFIX=nsk_console
 
 Flow:
 
-1. Restart Gateway with `python run.py`.
+1. Restart Gateway (`python run.py`, or `bootstrap.py` on panel deployments — see below).
 2. Copy the printed `EPHEMERAL NESTY CONSOLE API KEY` value from startup logs.
 3. Paste it into Nesty Console Gateway credentials as `NESTY_API_KEY`.
 4. On the next Gateway restart, the key rotates and Console credentials must be updated again.

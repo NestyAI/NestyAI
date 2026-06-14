@@ -185,12 +185,22 @@ docker compose up --build -d
 See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for:
 
 - Docker sidecar mode
-- Panel-friendly tunnel mode
+- Pterodactyl / panel mode (Cloudflare Tunnel + **git sync bootstrap**)
 - Environment variable setup
 
 ---
 
-## Panel Bootstrap
+## Panel Deployments (Pterodactyl / container panel)
+
+### Git sync bootstrap
+
+On panel hosts with locked startup commands, set **`PY_FILE=bootstrap.py`** (panel label may say *APP PY FILE*). Bootstrap syncs tracked code from `origin/main` (`git fetch` + `git reset --hard`) then starts `run.py`.
+
+Runtime data is preserved: `.env`, `data/nesty.db`, `.nesty/` (Console providers, model overrides, managed secrets).
+
+Full setup, troubleshooting, and env vars: [`docs/DEPLOYMENT.md` § Cloudflare Tunnel — Mode B`](docs/DEPLOYMENT.md).
+
+### Ephemeral Console API key
 
 For panel environments where interactive shell commands are unreliable, Gateway can generate an ephemeral Console API key at startup.
 
@@ -202,7 +212,7 @@ NESTY_EPHEMERAL_CONSOLE_KEY_ENABLED=true
 
 Flow:
 
-1. Restart Gateway with `python run.py`.
+1. Restart Gateway (`python bootstrap.py` on panel, or `python run.py` locally).
 2. Copy the startup log banner key labeled `EPHEMERAL NESTY CONSOLE API KEY`.
 3. Paste it into Nesty Console as `NESTY_API_KEY`.
 

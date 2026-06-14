@@ -2,6 +2,8 @@
 
 NestyAI Gateway v1.5.0+ adds secure runtime configuration APIs for personal self-host operators and third-party/custom consoles. **v1.5.1** adds dynamic OpenAI-compatible provider registration.
 
+> **Panel git sync vs token bootstrap:** Pterodactyl **git sync** (`bootstrap.py`, `git_sync.py`, `NESTY_BOOTSTRAP_GIT_SYNC`) resets tracked repo files to `origin/main` before Gateway starts. It is unrelated to Internal Admin Token / Console secret bootstrap below. See [DEPLOYMENT.md — Mode B](DEPLOYMENT.md).
+
 ## Design principles
 
 - **Personal self-host first**: simple defaults, no multi-tenant registry, no billing/team features.

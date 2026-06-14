@@ -305,6 +305,7 @@ High-impact groups:
 - Provider keys and request timeout
 - Auth/rate/quota (`REQUIRE_API_KEY`, `RATE_LIMIT_*`)
 - Deployment hardening (`CORS_*`, `TRUSTED_HOSTS`, `SECURITY_HEADERS_ENABLED`)
+- Pterodactyl git sync (`NESTY_BOOTSTRAP_GIT_SYNC`, `NESTY_GIT_BRANCH`, `NESTY_GIT_REMOTE`) — see [`DEPLOYMENT.md`](DEPLOYMENT.md) Mode B
 - Conversation history (`CONVERSATION_HISTORY_*`)
 - Conversation summarization (`CONVERSATION_SUMMARY_*`)
 

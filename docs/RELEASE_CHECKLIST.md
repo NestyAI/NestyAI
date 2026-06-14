@@ -36,6 +36,12 @@ Use this checklist to verify the stability, security, and setup readiness of Nes
   - Confirm `TRUSTED_HOSTS` includes the public tunnel hostname/domain when TrustedHostMiddleware is enabled.
   - Confirm internal admin token is never exposed to frontend/mobile clients.
 
+- [ ] **Verify Pterodactyl Git Bootstrap (Panel Deployments Only)**
+  - Confirm panel variable `PY_FILE=bootstrap.py`.
+  - Restart and verify log contains `NESTYAI BOOTSTRAP — entrypoint active` and `active commit: <sha>`.
+  - Confirm runtime providers and model_config overrides still present after restart (SQLite / Console check).
+  - See [`docs/DEPLOYMENT.md`](DEPLOYMENT.md) Mode B for troubleshooting.
+
 - [ ] **Verify API Key Management**
   - Run the key generator: `python scripts/create_api_key.py --name test-key --env dev`
   - Verify that the prefix and generated key are displayed and saved to SQLite database correctly.
