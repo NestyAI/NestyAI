@@ -192,6 +192,7 @@ Set `NESTY_BOOTSTRAP_GIT_SYNC=false` only if you intentionally run a fork or pin
 | `ImportError: git_sync` | Old install without repo files | Pull latest or upload `git_sync.py` once |
 | `could not reset to origin/main` | Network or missing remote | Check git remote; retry restart |
 | Gateway starts but code looks stale | Sync disabled or no `.git` | Enable sync; confirm repo clone |
+| Z AI requests go to `api.z.ai` (404) | Stale `Z_AI_BASE_URL` in `.env` | Remove `Z_AI_BASE_URL` or set `https://open.bigmodel.cn/api/paas/v4`; restart. v1.6.3+ ignores deprecated `api.z.ai` automatically. |
 
 #### Tunnel and runtime notes
 

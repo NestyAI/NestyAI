@@ -74,6 +74,13 @@ def test_z_ai_optional_base_url_override() -> None:
     assert provider.endpoint == "https://custom.example/v4/chat/completions"
 
 
+def test_z_ai_ignores_deprecated_api_z_ai_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("Z_AI_BASE_URL", "https://api.z.ai/v1")
+    settings = Settings(z_ai_api_key="sk-zai")
+    providers = build_builtin_chat_providers(settings)
+    assert providers["z_ai"].endpoint == openai_compatible_chat_url(Z_AI_DEFAULT_BASE_URL)
+
+
 def test_z_ai_default_without_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("Z_AI_BASE_URL", raising=False)
     settings = Settings(z_ai_api_key="sk-zai")

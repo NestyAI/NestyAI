@@ -37,3 +37,11 @@ ANTHROPIC_MESSAGES_URL: str = "https://api.anthropic.com/v1/messages"
 
 def openai_compatible_chat_url(base_url: str) -> str:
     return f"{base_url.rstrip('/')}/chat/completions"
+
+
+def resolve_z_ai_base_url(base_url: str | None) -> str:
+    """Return Zhipu OpenAI-compatible base URL; ignore deprecated api.z.ai overrides."""
+    candidate = str(base_url or Z_AI_DEFAULT_BASE_URL).rstrip("/")
+    if "api.z.ai" in candidate.lower():
+        return Z_AI_DEFAULT_BASE_URL.rstrip("/")
+    return candidate
